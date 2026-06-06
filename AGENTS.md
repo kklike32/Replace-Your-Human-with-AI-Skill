@@ -19,19 +19,19 @@ python3.13 -m venv .venv
 source .venv/bin/activate
 ```
 
-2. Install dependencies:
+1. Install dependencies:
 
 ```bash
 python -m pip install -e '.[dev]'
 ```
 
-3. Create local environment config:
+1. Create local environment config:
 
 ```bash
 cp .env.example .env
 ```
 
-4. Run tests:
+1. Run tests:
 
 ```bash
 python -m pytest -q
@@ -130,16 +130,16 @@ Key patterns:
 1. `ImportError` for `StrEnum`:
 - Use Python 3.11+ (3.10 is unsupported).
 
-2. Cloud sync fails with 404:
+1. Cloud sync fails with 404:
 - Check `INSFORGE_BASE_URL` and API route assumptions in `insforge_client.py`.
 
-3. Cloud sync fails with auth errors:
+1. Cloud sync fails with auth errors:
 - Verify `INSFORGE_API_KEY` and optional `INSFORGE_AUTH_TOKEN`.
 
-4. Screenshot upload times out:
+1. Screenshot upload times out:
 - Confirm storage bucket exists and upload strategy/confirm flow succeeds.
 
-5. No keyboard or mouse events recorded:
+1. No keyboard or mouse events recorded:
 - Ensure macOS accessibility/input monitoring permissions are granted.
 
 ## Commit Guidance
