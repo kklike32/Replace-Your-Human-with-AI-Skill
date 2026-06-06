@@ -1,51 +1,47 @@
 -- InsForge schema for computer-usage-tracker
-create table if not exists users (
-   id         uuid primary key,
-   email      text null,
-   created_at timestamptz not null default now()
+CREATE TABLE IF NOT EXISTS users (
+    id UUID PRIMARY KEY,
+    email TEXT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-create table if not exists sessions (
-   id           uuid primary key,
-   user_id      uuid null,
-   started_at   timestamptz not null,
-   ended_at     timestamptz null,
-   session_name text null,
-   device_name  text null,
-   os_name      text null,
-   sync_enabled boolean not null default false,
-   created_at   timestamptz not null default now()
+CREATE TABLE IF NOT EXISTS sessions (
+    id UUID PRIMARY KEY,
+    user_id UUID NULL,
+    started_at TIMESTAMPTZ NOT NULL,
+    ended_at TIMESTAMPTZ NULL,
+    session_name TEXT NULL,
+    device_name TEXT NULL,
+    os_name TEXT NULL,
+    sync_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-create table if not exists events (
-   id           uuid primary key,
-   session_id   uuid not null
-      references sessions ( id ),
-   timestamp    timestamptz not null,
-   event_type   text not null,
-   app_name     text null,
-   window_title text null,
-   metadata     jsonb not null,
-   created_at   timestamptz not null default now()
+CREATE TABLE IF NOT EXISTS events (
+    id UUID PRIMARY KEY,
+    session_id UUID NOT NULL REFERENCES sessions(id),
+    timestamp TIMESTAMPTZ NOT NULL,
+    event_type TEXT NOT NULL,
+    app_name TEXT NULL,
+    window_title TEXT NULL,
+    metadata JSONB NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-create table if not exists screenshots (
-   id           uuid primary key,
-   session_id   uuid not null
-      references sessions ( id ),
-   event_id     uuid null
-      references events ( id ),
-   storage_path text not null,
-   ocr_text     text null,
-   captured_at  timestamptz not null,
-   created_at   timestamptz not null default now()
+CREATE TABLE IF NOT EXISTS screenshots (
+    id UUID PRIMARY KEY,
+    session_id UUID NOT NULL REFERENCES sessions(id),
+    event_id UUID NULL REFERENCES events(id),
+    storage_path TEXT NOT NULL,
+    ocr_text TEXT NULL,
+    captured_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-create table if not exists summaries (
-   id          uuid primary key,
-   session_id  uuid not null
-      references sessions ( id ),
-   pseudocode  text not null,
-   suggestions jsonb not null,
-   created_at  timestamptz not null default now()
+CREATE TABLE IF NOT EXISTS summaries (
+    id UUID PRIMARY KEY,
+    session_id UUID NOT NULL REFERENCES sessions(id),
+    pseudocode TEXT NOT NULL,
+    suggestions JSONB NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

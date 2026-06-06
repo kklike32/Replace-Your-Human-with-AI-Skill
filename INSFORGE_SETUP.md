@@ -1,4 +1,4 @@
-# InsForge Setup for computer-usage-tracker
+# InsForge Setup
 
 ## 1) Configure environment
 
@@ -10,27 +10,23 @@ Copy `.env.example` to `.env` and set:
 - `INSFORGE_AUTH_TOKEN` (optional)
 - `INSFORGE_STORAGE_BUCKET=session-screenshots`
 
-## 2) Create database schema
+## 2) Create schema
 
-Run SQL from `insforge_schema.sql` in your InsForge Postgres instance.
+Run SQL from `insforge_schema.sql` in your InsForge Postgres project.
 
 ## 3) Create storage bucket
 
-Create bucket: `session-screenshots`
+Create bucket: `session-screenshots`.
 
-## 4) Run the tracker locally first
+## 4) Run tracker
+
+Use local-first mode by default:
 
 ```bash
 tracker start
 ```
 
-## 5) Enable sync when ready
-
-```bash
-ENABLE_CLOUD_SYNC=true tracker sync
-```
-
-To upload screenshots too:
+Enable cloud sync when ready:
 
 ```bash
 ENABLE_CLOUD_SYNC=true ENABLE_SCREENSHOT_UPLOAD=true tracker sync
@@ -38,6 +34,5 @@ ENABLE_CLOUD_SYNC=true ENABLE_SCREENSHOT_UPLOAD=true tracker sync
 
 ## Notes
 
-- The app always writes to local SQLite first.
-- Sync to InsForge is a second step for resilience when offline.
-- Screenshot upload is disabled by default for privacy.
+- This project writes to local SQLite first, then syncs to InsForge.
+- Screenshot upload remains disabled unless explicitly enabled.
