@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-from tracker.events import Event, ScreenshotRecord, Session, Summary
+from tracker.events import ChunkSummary, Event, FinalPseudocode, ScreenshotRecord, Session
 
 
 class TrackerRepository(ABC):
@@ -23,5 +23,9 @@ class TrackerRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def save_summary(self, summary: Summary) -> Summary:
+    def save_chunk_summary(self, summary: ChunkSummary) -> ChunkSummary:
+        raise NotImplementedError
+
+    @abstractmethod
+    def save_final_pseudocode(self, final: FinalPseudocode) -> FinalPseudocode:
         raise NotImplementedError

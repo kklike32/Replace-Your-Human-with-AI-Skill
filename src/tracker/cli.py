@@ -1,34 +1,47 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional
 
 import typer
 from rich.console import Console
 from rich.panel import Panel
 
 from .config import TrackerConfig
-from .events import Event, EventType, Summary
-from .pseudocode import PseudocodeGenerator
+from .llm import build_llm_client
 from .recorder import SessionRecorder
 from .storage.insforge_client import InsForgeClient
 from .storage.local_sqlite import LocalSQLiteRepository
-from .suggestions import SuggestionEngine
+from .summarization import generate_final_pseudocode
 from .sync import SyncService
 
 app = typer.Typer(help="Track desktop usage sessions and summarize workflows.")
 console = Console()
 
 
-def _build_config(db_path: str | None) -> TrackerConfig:
+def _build_config(
+    db_path: Optional[str],
+    cloud_sync: Optional[bool] = None,
+    llm_provider: Optional[str] = None,
+    screenshot_interval: Optional[int] = None,
+    chunk_interval: Optional[int] = None,
+) -> TrackerConfig:
     config = TrackerConfig.from_env()
     if db_path:
         config.db_path = Path(db_path)
+    if cloud_sync is not None:
+        config.enable_cloud_sync = cloud_sync
+    if llm_provider:
+        config.llm_provider = llm_provider
+    if screenshot_interval is not None:
+        config.screenshot_interval_seconds = screenshot_interval
+    if chunk_interval is not None:
+        config.chunk_interval_seconds = chunk_interval
     config.ensure_directories()
     return config
 
 
-def _get_session_id(repository: LocalSQLiteRepository, session_id: str | None) -> str:
+def _get_session_id(repository: LocalSQLiteRepository, session_id: Optional[str]) -> str:
     if session_id:
         return session_id
     latest = repository.get_latest_session()
@@ -41,247 +54,215 @@ def _get_session_id(repository: LocalSQLiteRepository, session_id: str | None) -
 def _maybe_client(config: TrackerConfig) -> InsForgeClient | None:
     if not (config.enable_cloud_sync and config.has_insforge_credentials()):
         return None
-    return InsForgeClient(
-        base_url=str(config.insforge_base_url),
-        api_key=str(config.insforge_api_key),
-        auth_token=config.insforge_auth_token,
-    )
+    return InsForgeClient.from_config(config)
 
 
 def _schema_sql() -> str:
-    return """-- InsForge schema for computer-usage-tracker
-CREATE TABLE IF NOT EXISTS users (
-    id UUID PRIMARY KEY,
-    email TEXT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    return """create table if not exists sessions (
+  id uuid primary key,
+  user_id uuid nullable,
+  started_at timestamptz not null,
+  ended_at timestamptz nullable,
+  session_name text nullable,
+  device_name text nullable,
+  os_name text nullable,
+  created_at timestamptz default now()
 );
 
-CREATE TABLE IF NOT EXISTS sessions (
-    id UUID PRIMARY KEY,
-    user_id UUID NULL,
-    started_at TIMESTAMPTZ NOT NULL,
-    ended_at TIMESTAMPTZ NULL,
-    session_name TEXT NULL,
-    device_name TEXT NULL,
-    os_name TEXT NULL,
-    sync_enabled BOOLEAN NOT NULL DEFAULT FALSE,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+create table if not exists chunk_summaries (
+  id uuid primary key,
+  session_id uuid references sessions(id),
+  chunk_index integer not null,
+  started_at timestamptz not null,
+  ended_at timestamptz not null,
+  summary text not null,
+  observed_apps jsonb nullable,
+  confidence text nullable,
+  created_at timestamptz default now()
 );
 
-CREATE TABLE IF NOT EXISTS events (
-    id UUID PRIMARY KEY,
-    session_id UUID NOT NULL REFERENCES sessions(id),
-    timestamp TIMESTAMPTZ NOT NULL,
-    event_type TEXT NOT NULL,
-    app_name TEXT NULL,
-    window_title TEXT NULL,
-    metadata JSONB NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS screenshots (
-    id UUID PRIMARY KEY,
-    session_id UUID NOT NULL REFERENCES sessions(id),
-    event_id UUID NULL REFERENCES events(id),
-    storage_path TEXT NOT NULL,
-    ocr_text TEXT NULL,
-    captured_at TIMESTAMPTZ NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS summaries (
-    id UUID PRIMARY KEY,
-    session_id UUID NOT NULL REFERENCES sessions(id),
-    pseudocode TEXT NOT NULL,
-    suggestions JSONB NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+create table if not exists final_pseudocode (
+  id uuid primary key,
+  session_id uuid references sessions(id),
+  pseudocode jsonb not null,
+  plain_text text not null,
+  suggestions jsonb nullable,
+  created_at timestamptz default now()
 );
 """
 
 
 def _setup_markdown() -> str:
-    return """# InsForge Setup
+    return """# Privacy-First Backend Setup
 
-## 1) Configure environment
+## Remote data model
 
-Copy `.env.example` to `.env` and set:
+InsForge stores only:
 
-- `INSFORGE_BASE_URL`
-- `INSFORGE_PROJECT_ID`
-- `INSFORGE_API_KEY`
-- `INSFORGE_AUTH_TOKEN` (optional)
-- `INSFORGE_STORAGE_BUCKET=session-screenshots`
+- session metadata
+- 6-second chunk summaries
+- final pseudocode
+- optional suggestions in final pseudocode
 
-## 2) Create schema
+InsForge does not store raw screenshots, OCR text, mouse events, keyboard events, or local event logs.
 
-Run SQL from `insforge_schema.sql` in your InsForge Postgres project.
+## Environment
 
-## 3) Create storage bucket
+Copy `.env.example` to `.env` and set the InsForge and Vertex values you need.
 
-Create bucket: `session-screenshots`.
+## Schema
 
-## 4) Run tracker
+Run SQL from `insforge_schema.sql` in your InsForge project.
 
-Use local-first mode by default:
+## Usage
 
-```bash
-tracker start
-```
-
-Enable cloud sync when ready:
+Start local capture:
 
 ```bash
-ENABLE_CLOUD_SYNC=true ENABLE_SCREENSHOT_UPLOAD=true tracker sync
+tracker start --llm-provider mock
 ```
 
-## Notes
+Enable remote summary sync:
 
-- This project writes to local SQLite first, then syncs to InsForge.
-- Screenshot upload remains disabled unless explicitly enabled.
+```bash
+tracker start --cloud-sync --llm-provider vertex_gemini
+```
 """
 
 
 @app.command("init-backend")
 def init_backend(
-    db_path: str | None = typer.Option(None, help="Path to local SQLite DB."),
+    db_path: Optional[str] = typer.Option(None, help="Path to local SQLite DB."),
 ) -> None:
     """Generate InsForge backend setup artifacts and print expected schema."""
     config = _build_config(db_path)
-    schema = _schema_sql()
-    setup_doc = _setup_markdown()
+    Path("insforge_schema.sql").write_text(_schema_sql(), encoding="utf-8")
+    Path("INSFORGE_SETUP.md").write_text(_setup_markdown(), encoding="utf-8")
 
-    Path("insforge_schema.sql").write_text(schema, encoding="utf-8")
-    Path("INSFORGE_SETUP.md").write_text(setup_doc, encoding="utf-8")
-
-    console.print(Panel.fit(schema, title="Expected InsForge Schema"))
+    console.print(Panel.fit(_schema_sql(), title="Expected InsForge Schema"))
     if config.has_insforge_credentials():
-        console.print(
-            "[green]InsForge env vars found.[/green] "
-            "Automatic remote provisioning is backend-specific, so schema/setup files were generated."
-        )
+        console.print("[green]InsForge env vars found.[/green] Setup artifacts regenerated.")
     else:
-        console.print(
-            "[yellow]Missing InsForge env vars.[/yellow] Generated `insforge_schema.sql` and `INSFORGE_SETUP.md`."
-        )
+        console.print("[yellow]Missing InsForge env vars.[/yellow] Setup artifacts regenerated.")
 
 
 @app.command()
 def start(
-    db_path: str | None = typer.Option(None, help="Path to local SQLite DB."),
-    screenshot_interval: int = typer.Option(
-        5,
+    db_path: Optional[str] = typer.Option(None, help="Path to local SQLite DB."),
+    screenshot_interval: Optional[int] = typer.Option(
+        None,
         min=1,
-        help="Screenshot interval in seconds.",
+        help="Screenshot interval in seconds. Defaults to env.",
+    ),
+    chunk_interval: Optional[int] = typer.Option(
+        None,
+        min=1,
+        help="Chunk interval in seconds. Defaults to env.",
     ),
     ocr: bool = typer.Option(True, "--ocr/--no-ocr", help="Toggle OCR."),
-    local_only: bool = typer.Option(
-        True,
-        "--local-only/--allow-remote",
-        help="Local-only mode for this prototype.",
+    cloud_sync: bool = typer.Option(False, "--cloud-sync", help="Enable cloud sync for this run."),
+    no_cloud_sync: bool = typer.Option(
+        False,
+        "--no-cloud-sync",
+        help="Disable cloud sync for this run.",
+    ),
+    llm_provider: Optional[str] = typer.Option(
+        None,
+        help="LLM provider override, for example `vertex_gemini` or `mock`.",
     ),
 ) -> None:
     """Start a new tracking session and record until Ctrl+C."""
-    config = _build_config(db_path)
-    config.screenshot_interval_seconds = screenshot_interval
+    cloud_sync_override: Optional[bool] = None
+    if cloud_sync and no_cloud_sync:
+        raise typer.BadParameter("Choose either --cloud-sync or --no-cloud-sync.")
+    if cloud_sync:
+        cloud_sync_override = True
+    if no_cloud_sync:
+        cloud_sync_override = False
+    config = _build_config(
+        db_path,
+        cloud_sync=cloud_sync_override,
+        llm_provider=llm_provider,
+        screenshot_interval=screenshot_interval,
+        chunk_interval=chunk_interval,
+    )
     config.ocr_enabled = ocr
-    config.local_only_mode = local_only
     repository = LocalSQLiteRepository(config.db_path)
     client = _maybe_client(config)
-    recorder = SessionRecorder(config, repository, insforge_client=client)
+    llm_client = build_llm_client(config, config.llm_provider)
+    recorder = SessionRecorder(
+        config,
+        repository,
+        llm_client=llm_client,
+        insforge_client=client,
+    )
 
     console.print("[bold green]Tracking started.[/bold green] Press Ctrl+C to stop.")
     session_id = recorder.run()
     console.print(f"[bold]Session stopped:[/bold] {session_id}")
 
-    if client:
-        result = SyncService(repository, client, config).sync_all()
-        console.print(f"[green]Cloud sync complete:[/green] {result}")
+    final = repository.get_final_pseudocode(session_id)
+    if final:
+        console.print(Panel.fit(final.plain_text, title=f"Session {session_id} Final Pseudocode"))
 
 
-@app.command()
-def stop(
-    session_id: str | None = typer.Option(None, help="Session ID to stop."),
-    db_path: str | None = typer.Option(None, help="Path to local SQLite DB."),
+@app.command("summarize-final")
+def summarize_final(
+    session_id: Optional[str] = typer.Option(None, help="Session ID to summarize."),
+    db_path: Optional[str] = typer.Option(None, help="Path to local SQLite DB."),
+    llm_provider: Optional[str] = typer.Option(None, help="LLM provider override."),
 ) -> None:
-    """Stop a running session by ID (best effort)."""
-    config = _build_config(db_path)
+    """Generate final pseudocode from stored chunk summaries."""
+    config = _build_config(db_path, llm_provider=llm_provider)
     repository = LocalSQLiteRepository(config.db_path)
-    active = repository.get_active_session()
-    target_session_id = session_id or (active.id if active else None)
+    chosen_session_id = _get_session_id(repository, session_id)
+    summaries = repository.get_chunk_summaries(chosen_session_id)
+    if not summaries:
+        raise typer.BadParameter(f"No chunk summaries found for session {chosen_session_id}.")
 
-    if target_session_id is None:
-        console.print("[yellow]No running session found.[/yellow]")
-        raise typer.Exit(0)
+    final = generate_final_pseudocode(build_llm_client(config, config.llm_provider), summaries)
+    repository.save_final_pseudocode(final)
 
-    repository.save_event(
-        Event(
-            session_id=target_session_id,
-            event_type=EventType.SESSION_STOP,
-            metadata={"reason": "manual_stop_command"},
-        )
-    )
-
-    session = repository.get_session(target_session_id)
-    if session:
-        session.status = "stopped"
-        session.ended_at = datetime.now(timezone.utc)
-        repository.update_session(session)
-    console.print(f"[bold]Marked session as stopped:[/bold] {target_session_id}")
+    client = _maybe_client(config)
+    if client:
+        SyncService(repository, client, config).sync_session(chosen_session_id)
+    console.print(Panel.fit(final.plain_text, title=f"Session {chosen_session_id} Final Pseudocode"))
 
 
 @app.command()
 def summarize(
-    session_id: str | None = typer.Option(None, help="Session ID to summarize."),
-    db_path: str | None = typer.Option(None, help="Path to local SQLite DB."),
+    session_id: Optional[str] = typer.Option(None, help="Session ID to summarize."),
+    db_path: Optional[str] = typer.Option(None, help="Path to local SQLite DB."),
+    llm_provider: Optional[str] = typer.Option(None, help="LLM provider override."),
 ) -> None:
-    """Summarize a session into pseudocode and suggestions."""
-    config = _build_config(db_path)
-    repository = LocalSQLiteRepository(config.db_path)
-    chosen_session_id = _get_session_id(repository, session_id)
+    """Backward-compatible alias for summarize-final."""
+    summarize_final(session_id=session_id, db_path=db_path, llm_provider=llm_provider)
 
-    events = repository.get_events(chosen_session_id)
-    pseudocode = PseudocodeGenerator().generate(events)
-    suggestions = SuggestionEngine().suggest(events, pseudocode)
-    summary = Summary(
-        session_id=chosen_session_id,
-        pseudocode=pseudocode,
-        suggestions=suggestions,
-    )
-    repository.save_summary(summary)
-    repository.save_event(
-        Event(session_id=chosen_session_id, event_type=EventType.PSEUDOCODE_GENERATED)
-    )
-    repository.save_event(
-        Event(session_id=chosen_session_id, event_type=EventType.SUGGESTION_GENERATED)
-    )
 
-    console.print(Panel.fit(pseudocode, title=f"Session {chosen_session_id} Pseudocode"))
-    suggestion_text = "\n".join(
-        f"Suggestion {idx}: {suggestion}"
-        for idx, suggestion in enumerate(suggestions, start=1)
-    )
-    console.print(Panel.fit(suggestion_text, title="Suggestions"))
-
+@app.command("sync-summaries")
+def sync_summaries(
+    session_id: str = typer.Option(..., help="Session ID to sync."),
+    db_path: Optional[str] = typer.Option(None, help="Path to local SQLite DB."),
+) -> None:
+    """Upload chunk summaries and final pseudocode for one session."""
+    config = _build_config(db_path, cloud_sync=True)
     client = _maybe_client(config)
-    if client:
-        result = SyncService(repository, client, config).sync_all()
-        console.print(f"[green]Cloud sync complete:[/green] {result}")
+    if client is None:
+        raise typer.BadParameter("Missing InsForge credentials in environment.")
+    repository = LocalSQLiteRepository(config.db_path)
+    result = SyncService(repository, client, config).sync_session(session_id)
+    console.print(f"[bold green]Summary sync complete:[/bold green] {result}")
 
 
 @app.command()
 def sync(
-    db_path: str | None = typer.Option(None, help="Path to local SQLite DB."),
+    db_path: Optional[str] = typer.Option(None, help="Path to local SQLite DB."),
 ) -> None:
-    """Upload unsynced local data to InsForge."""
-    config = _build_config(db_path)
-    if not config.enable_cloud_sync:
-        console.print("[yellow]Cloud sync is disabled. Set ENABLE_CLOUD_SYNC=true.[/yellow]")
-        raise typer.Exit(0)
-
+    """Upload unsynced sessions, chunk summaries, and final pseudocode."""
+    config = _build_config(db_path, cloud_sync=True)
     client = _maybe_client(config)
     if client is None:
         raise typer.BadParameter("Missing InsForge credentials in environment.")
-
     repository = LocalSQLiteRepository(config.db_path)
     result = SyncService(repository, client, config).sync_all()
     console.print(f"[bold green]Sync complete:[/bold green] {result}")
@@ -291,38 +272,29 @@ def sync(
 def export(
     session_id: str = typer.Option(..., help="Session ID to export."),
     format: str = typer.Option("markdown", help="Export format."),
-    db_path: str | None = typer.Option(None, help="Path to local SQLite DB."),
-    output: str | None = typer.Option(None, help="Output path override."),
+    db_path: Optional[str] = typer.Option(None, help="Path to local SQLite DB."),
+    output: Optional[str] = typer.Option(None, help="Output path override."),
 ) -> None:
-    """Export session summary to markdown."""
+    """Export final pseudocode summary to markdown."""
     config = _build_config(db_path)
     repository = LocalSQLiteRepository(config.db_path)
 
     if format.lower() != "markdown":
         raise typer.BadParameter("Only markdown export is supported in this prototype.")
 
-    summary = repository.get_summary(session_id)
-    if summary is None:
-        events = repository.get_events(session_id)
-        pseudocode = PseudocodeGenerator().generate(events)
-        suggestions = SuggestionEngine().suggest(events, pseudocode)
-    else:
-        pseudocode = summary.pseudocode
-        suggestions = summary.suggestions
+    final = repository.get_final_pseudocode(session_id)
+    if final is None:
+        raise typer.BadParameter(f"No final pseudocode found for session {session_id}.")
 
-    if output:
-        output_path = Path(output)
-    else:
-        output_path = config.export_dir / f"session_{session_id}_summary.md"
-
+    output_path = Path(output) if output else config.export_dir / f"session_{session_id}_summary.md"
     output_path.parent.mkdir(parents=True, exist_ok=True)
     suggestion_lines = "\n".join(
-        f"- Suggestion {idx}: {text}" for idx, text in enumerate(suggestions, start=1)
+        f"- Suggestion {idx}: {text}" for idx, text in enumerate(final.suggestions, start=1)
     )
     markdown = (
         f"# Session {session_id} Summary\n\n"
-        f"## Pseudocode\n\n{pseudocode}\n\n"
-        f"## Suggestions\n\n{suggestion_lines}\n"
+        f"## Pseudocode\n\n{final.plain_text}\n\n"
+        f"## Suggestions\n\n{suggestion_lines or '- None'}\n"
     )
     output_path.write_text(markdown, encoding="utf-8")
     console.print(f"[bold green]Exported:[/bold green] {output_path}")

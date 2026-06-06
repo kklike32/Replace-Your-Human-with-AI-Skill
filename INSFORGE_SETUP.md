@@ -1,4 +1,4 @@
-# InsForge Setup
+# Privacy-First Backend Setup
 
 ## 1) Configure environment
 
@@ -7,32 +7,48 @@ Copy `.env.example` to `.env` and set:
 - `INSFORGE_BASE_URL`
 - `INSFORGE_PROJECT_ID`
 - `INSFORGE_API_KEY`
-- `INSFORGE_AUTH_TOKEN` (optional)
-- `INSFORGE_STORAGE_BUCKET=session-screenshots`
+- `INSFORGE_AUTH_TOKEN` if needed
+- `GOOGLE_CLOUD_PROJECT`
+- `GOOGLE_CLOUD_LOCATION`
+- `GOOGLE_APPLICATION_CREDENTIALS`
 
 ## 2) Create schema
 
-Run SQL from `insforge_schema.sql` in your InsForge Postgres project.
+Run SQL from `insforge_schema.sql` in your InsForge project.
 
-## 3) Create storage bucket
+Remote tables:
 
-Create bucket: `session-screenshots`.
+- `sessions`
+- `chunk_summaries`
+- `final_pseudocode`
+
+## 3) Privacy contract
+
+InsForge receives only:
+
+- session metadata
+- chunk summaries
+- final pseudocode
+- optional suggestions
+
+InsForge never receives:
+
+- screenshots
+- OCR text
+- mouse coordinates
+- keyboard events
+- raw local event logs
 
 ## 4) Run tracker
 
-Use local-first mode by default:
+Local-only:
 
 ```bash
-tracker start
+tracker start --llm-provider mock
 ```
 
-Enable cloud sync when ready:
+Cloud summary sync:
 
 ```bash
-ENABLE_CLOUD_SYNC=true ENABLE_SCREENSHOT_UPLOAD=true tracker sync
+tracker start --cloud-sync --llm-provider vertex_gemini
 ```
-
-## Notes
-
-- This project writes to local SQLite first, then syncs to InsForge.
-- Screenshot upload remains disabled unless explicitly enabled.

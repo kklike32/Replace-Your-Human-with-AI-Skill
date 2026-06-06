@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 SENSITIVE_KEYWORDS = (
     "password",
     "passcode",
@@ -38,3 +40,73 @@ def is_sensitive_ocr_text(text: str | None) -> bool:
         return False
     lower = text.lower()
     return any(keyword in lower for keyword in SENSITIVE_KEYWORDS)
+
+
+ALLOWED_REMOTE_FIELDS = {
+    "sessions": {
+        "id",
+        "user_id",
+        "started_at",
+        "ended_at",
+        "session_name",
+        "device_name",
+        "os_name",
+    },
+    "chunk_summaries": {
+        "id",
+        "session_id",
+        "chunk_index",
+        "started_at",
+        "ended_at",
+        "summary",
+        "observed_apps",
+        "confidence",
+    },
+    "final_pseudocode": {
+        "id",
+        "session_id",
+        "pseudocode",
+        "plain_text",
+        "suggestions",
+    },
+}
+
+
+FORBIDDEN_REMOTE_KEYS = {
+    "ocr_text",
+    "screenshots",
+    "screenshot",
+    "mouse_events",
+    "keyboard_events",
+    "keyboard_shortcuts",
+    "metadata",
+    "storage_path",
+    "local_path",
+    "window_title",
+    "app_name",
+    "event_type",
+    "timestamp",
+    "text",
+    "x",
+    "y",
+    "button",
+    "key",
+    "modifiers",
+    "raw_events",
+    "events",
+}
+
+
+def assert_remote_payload_allowed(table: str, payload: Mapping[str, object]) -> None:
+    allowed_keys = ALLOWED_REMOTE_FIELDS.get(table)
+    if allowed_keys is None:
+        raise ValueError(f"Unknown remote table: {table}")
+
+    payload_keys = set(payload.keys())
+    if not payload_keys.issubset(allowed_keys):
+        disallowed = sorted(payload_keys - allowed_keys)
+        raise ValueError(f"Payload for {table} contains disallowed keys: {disallowed}")
+
+    forbidden = sorted(key for key in payload_keys if key in FORBIDDEN_REMOTE_KEYS)
+    if forbidden:
+        raise ValueError(f"Payload for {table} contains forbidden privacy keys: {forbidden}")

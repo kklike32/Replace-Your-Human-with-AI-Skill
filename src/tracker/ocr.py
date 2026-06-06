@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytesseract
 from PIL import Image
 
 
@@ -14,6 +13,8 @@ class OCRProcessor:
         if not self.enabled:
             return None
         try:
+            import pytesseract
+
             image = Image.open(image_path)
             text = pytesseract.image_to_string(image)
         except Exception:

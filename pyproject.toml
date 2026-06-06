@@ -30,6 +30,10 @@ llm = [
   "openai>=1.30.0",
   "ollama>=0.2.0"
 ]
+vertex = [
+  "google-cloud-aiplatform>=1.70.0",
+  "vertexai>=1.70.0"
+]
 dev = [
   "pytest>=8.2.0"
 ]

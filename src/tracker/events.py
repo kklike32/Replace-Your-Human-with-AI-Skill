@@ -1,14 +1,16 @@
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from enum import StrEnum
+from enum import Enum
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
 
-class EventType(StrEnum):
+class EventType(str, Enum):
     SESSION_START = "session_start"
     SESSION_STOP = "session_stop"
     MOUSE_CLICK = "mouse_click"
@@ -65,11 +67,41 @@ class ScreenshotRecord(BaseModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
-class Summary(BaseModel):
-    id: str = Field(default_factory=_uuid)
+@dataclass(slots=True)
+class ActivityChunk:
     session_id: str
-    pseudocode: str
-    suggestions: list[str]
+    chunk_index: int
+    started_at: str
+    ended_at: str
+    screenshots: list[Path]
+    mouse_events: list[dict]
+    keyboard_shortcuts: list[dict]
+    active_windows: list[dict]
+    ocr_text: list[str]
+
+
+@dataclass(slots=True)
+class ChunkSummary:
+    session_id: str
+    chunk_index: int
+    started_at: str
+    ended_at: str
+    summary: str
+    observed_apps: list[str]
+    confidence: str
+    id: str = field(default_factory=_uuid)
     synced: bool = False
     cloud_id: str | None = None
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+@dataclass(slots=True)
+class FinalPseudocode:
+    session_id: str
+    pseudocode: list[str]
+    plain_text: str
+    suggestions: list[str]
+    id: str = field(default_factory=_uuid)
+    synced: bool = False
+    cloud_id: str | None = None
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))

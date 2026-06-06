@@ -1,55 +1,39 @@
 # computer-usage-tracker
 
-`computer-usage-tracker` is a privacy-first Python desktop prototype that:
-
-- Tracks local computer usage during a work session
-- Stores structured events and screenshot metadata
-- Generates readable workflow pseudocode
-- Suggests useful next steps
-
-The app is local-first by design and can sync to InsForge as the backend of record.
-
-## Why InsForge
-
-InsForge is used for:
-
-- PostgreSQL database for sessions/events/summaries
-- Auth integration for future multi-user flows
-- S3-compatible object storage for screenshots
-- Future edge/serverless backend functions and AI gateway integration
-
-For hackathon:
-Use InsForge Cloud because it is faster to set up, easier to demo, and avoids local infrastructure issues.
-
-For long-term:
-Keep the code backend-agnostic through environment variables and the `InsForgeClient` abstraction. If privacy or cost becomes important, switch to the open-source self-hosted InsForge deployment without changing the app architecture.
+`computer-usage-tracker` is a local-first Python desktop prototype that captures computer activity, summarizes short activity windows with an LLM, and produces a final pseudocode workflow for the full session.
 
 ## Architecture
 
-- Local tracker runs on user machine
-- Local SQLite is always written first
-- InsForge sync is second (`tracker sync` or auto-sync when enabled)
-- Screenshot files are kept locally and uploaded only if explicitly enabled
+Core flow:
 
-Core modules:
+- local screenshots every 2 seconds
+- local mouse, keyboard, app/window, and OCR capture
+- 6-second chunk builder
+- LLM chunk summarization
+- local summary persistence
+- optional InsForge sync for chunk summaries only
+- final session pseudocode generation
+- optional InsForge sync for final pseudocode only
 
-- `tracker.recorder`: keyboard/mouse listeners, app/window tracking, screenshot loop, pause/resume
-- `tracker.storage.local_sqlite`: local fallback and primary write path
-- `tracker.storage.insforge_client`: InsForge API wrapper
-- `tracker.sync`: upload unsynced sessions/events/screenshots/summaries
-- `tracker.pseudocode`: deterministic rule-based pseudocode generator
-- `tracker.suggestions`: deterministic rule-based suggestion engine
-- `tracker.agent`: future explicit-consent action agent placeholder
+Relevant modules:
 
-## Privacy Defaults
+- `tracker.recorder`: session lifecycle, capture loop, chunk summarization, finalization
+- `tracker.chunker`: in-memory 6-second chunk assembly
+- `tracker.llm`: provider abstraction, mock provider, Vertex Gemini provider
+- `tracker.summarization`: prompt-safe orchestration helpers
+- `tracker.storage.local_sqlite`: local persistence for raw data and summaries
+- `tracker.storage.insforge_client`: summary-only InsForge API wrapper
+- `tracker.sync`: summary-only sync service
 
-- `ENABLE_CLOUD_SYNC=false`
-- `ENABLE_SCREENSHOT_UPLOAD=false`
-- Tracks keyboard events (printable and special keys) with privacy filters
-- Tries to avoid sensitive windows/password-like contexts
-- Pause/resume tracking with `Ctrl+Shift+P`
+## Privacy-First Backend Design
 
-This tool is intended for personal use with user consent.
+- Raw data stays local in SQLite and the local screenshot directory.
+- Screenshots are used only transiently for local chunk summarization.
+- Gemini / Vertex may receive screenshots and local context for model analysis.
+- InsForge receives only session metadata, detailed chunk summaries, final pseudocode, and optional suggestions.
+- InsForge never receives screenshots, raw mouse coordinates, raw keyboard events, full OCR text, local event logs, or raw app/window streams.
+- Users can disable cloud sync with `ENABLE_CLOUD_SYNC=false` or `tracker start --no-cloud-sync`.
+- Users can switch away from Vertex/Gemini by implementing the `LLMClient` interface and selecting another provider.
 
 ## Setup
 
@@ -62,103 +46,83 @@ This tool is intended for personal use with user consent.
 ### Install
 
 ```bash
-pip install -e .
-pip install -e .[dev]
+python -m pip install -e .[dev]
+python -m pip install -e .[vertex]
 ```
+
+Install the `vertex` extra only when using `tracker start --llm-provider vertex_gemini`.
 
 ### Environment
 
-Copy `.env.example` to `.env` and edit values as needed.
+Copy `.env.example` to `.env`.
+
+Key variables:
 
 ```bash
+SCREENSHOT_INTERVAL_SECONDS=2
+CHUNK_INTERVAL_SECONDS=6
+ENABLE_CLOUD_SYNC=false
+UPLOAD_ONLY_SUMMARIES=true
+LLM_PROVIDER=vertex_gemini
+LLM_MODEL=gemini-1.5-pro
+GOOGLE_CLOUD_PROJECT=
+GOOGLE_CLOUD_LOCATION=us-central1
+GOOGLE_APPLICATION_CREDENTIALS=
 INSFORGE_BASE_URL=
 INSFORGE_PROJECT_ID=
 INSFORGE_API_KEY=
 INSFORGE_AUTH_TOKEN=
-INSFORGE_STORAGE_BUCKET=session-screenshots
-ENABLE_CLOUD_SYNC=false
-ENABLE_SCREENSHOT_UPLOAD=false
+INSFORGE_SUMMARIES_TABLE=chunk_summaries
+INSFORGE_FINAL_TABLE=final_pseudocode
 LOCAL_DB_PATH=data/local_tracker.db
 ```
 
 ## CLI
 
-Initialize backend setup artifacts:
+Initialize backend artifacts:
 
 ```bash
 tracker init-backend
 ```
 
-Start tracking session:
+Start tracking:
 
 ```bash
-tracker start
+tracker start --llm-provider mock
+tracker start --cloud-sync --llm-provider vertex_gemini
 ```
 
-Stop running session (best effort):
+Generate final pseudocode from stored chunk summaries:
 
 ```bash
-tracker stop
+tracker summarize-final --session-id <session_id>
 ```
 
-Summarize latest session:
+Sync summary-only records:
 
 ```bash
-tracker summarize
-```
-
-Sync unsynced data to InsForge:
-
-```bash
+tracker sync-summaries --session-id <session_id>
 tracker sync
 ```
 
-Export markdown summary:
+Export final pseudocode:
 
 ```bash
-tracker export --session-id <id> --format markdown
+tracker export --session-id <session_id>
 ```
 
-## Data Model
+## Remote Schema
 
-InsForge schema targets these tables:
+InsForge stores only these tables:
 
-- `users`
 - `sessions`
-- `events`
-- `screenshots`
-- `summaries`
+- `chunk_summaries`
+- `final_pseudocode`
 
-Supported event types:
-
-- `session_start`
-- `session_stop`
-- `mouse_click`
-- `keyboard_shortcut`
-- `active_window`
-- `screenshot`
-- `ocr_text`
-- `pseudocode_generated`
-- `suggestion_generated`
-
-Screenshot object path format:
-
-`users/{user_id_or_anonymous}/sessions/{session_id}/{timestamp}.png`
-
-## Cloud vs Self-Hosted
-
-- Hackathon: use InsForge Cloud
-- Long-term: switch to self-hosted InsForge by updating environment variables; app architecture remains the same
+Use [`insforge_schema.sql`](/Users/keenan/Documents/AIPent/insforge_schema.sql) to create them.
 
 ## Tests
 
 ```bash
-pytest
+python -m pytest -q
 ```
-
-## Roadmap
-
-- Improve platform-specific active window/process fidelity
-- Add dashboard and backend function examples
-- Add optional LLM adapters for pseudocode/suggestions
-- Implement explicit-consent action execution layer in `tracker.agent`

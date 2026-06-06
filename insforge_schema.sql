@@ -1,47 +1,31 @@
--- InsForge schema for computer-usage-tracker
-CREATE TABLE IF NOT EXISTS users (
-    id UUID PRIMARY KEY,
-    email TEXT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+create table if not exists sessions (
+  id uuid primary key,
+  user_id uuid nullable,
+  started_at timestamptz not null,
+  ended_at timestamptz nullable,
+  session_name text nullable,
+  device_name text nullable,
+  os_name text nullable,
+  created_at timestamptz default now()
 );
 
-CREATE TABLE IF NOT EXISTS sessions (
-    id UUID PRIMARY KEY,
-    user_id UUID NULL,
-    started_at TIMESTAMPTZ NOT NULL,
-    ended_at TIMESTAMPTZ NULL,
-    session_name TEXT NULL,
-    device_name TEXT NULL,
-    os_name TEXT NULL,
-    sync_enabled BOOLEAN NOT NULL DEFAULT FALSE,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+create table if not exists chunk_summaries (
+  id uuid primary key,
+  session_id uuid references sessions(id),
+  chunk_index integer not null,
+  started_at timestamptz not null,
+  ended_at timestamptz not null,
+  summary text not null,
+  observed_apps jsonb nullable,
+  confidence text nullable,
+  created_at timestamptz default now()
 );
 
-CREATE TABLE IF NOT EXISTS events (
-    id UUID PRIMARY KEY,
-    session_id UUID NOT NULL REFERENCES sessions(id),
-    timestamp TIMESTAMPTZ NOT NULL,
-    event_type TEXT NOT NULL,
-    app_name TEXT NULL,
-    window_title TEXT NULL,
-    metadata JSONB NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS screenshots (
-    id UUID PRIMARY KEY,
-    session_id UUID NOT NULL REFERENCES sessions(id),
-    event_id UUID NULL REFERENCES events(id),
-    storage_path TEXT NOT NULL,
-    ocr_text TEXT NULL,
-    captured_at TIMESTAMPTZ NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS summaries (
-    id UUID PRIMARY KEY,
-    session_id UUID NOT NULL REFERENCES sessions(id),
-    pseudocode TEXT NOT NULL,
-    suggestions JSONB NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+create table if not exists final_pseudocode (
+  id uuid primary key,
+  session_id uuid references sessions(id),
+  pseudocode jsonb not null,
+  plain_text text not null,
+  suggestions jsonb nullable,
+  created_at timestamptz default now()
 );

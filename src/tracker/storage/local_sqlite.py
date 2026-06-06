@@ -2,15 +2,18 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
-from tracker.events import Event, EventType, ScreenshotRecord, Session, Summary
+from tracker.events import (
+    ChunkSummary,
+    Event,
+    EventType,
+    FinalPseudocode,
+    ScreenshotRecord,
+    Session,
+)
 from tracker.storage.repository import TrackerRepository
-
-
-def _utc_now() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 class LocalSQLiteRepository(TrackerRepository):
@@ -26,15 +29,6 @@ class LocalSQLiteRepository(TrackerRepository):
 
     def _init_schema(self) -> None:
         with self._connect() as conn:
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS users (
-                    id TEXT PRIMARY KEY,
-                    email TEXT,
-                    created_at TEXT NOT NULL
-                )
-                """
-            )
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS sessions (
@@ -89,10 +83,29 @@ class LocalSQLiteRepository(TrackerRepository):
             )
             conn.execute(
                 """
-                CREATE TABLE IF NOT EXISTS summaries (
+                CREATE TABLE IF NOT EXISTS chunk_summaries (
+                    id TEXT PRIMARY KEY,
+                    session_id TEXT NOT NULL,
+                    chunk_index INTEGER NOT NULL,
+                    started_at TEXT NOT NULL,
+                    ended_at TEXT NOT NULL,
+                    summary TEXT NOT NULL,
+                    observed_apps TEXT NOT NULL,
+                    confidence TEXT NOT NULL,
+                    synced INTEGER NOT NULL DEFAULT 0,
+                    cloud_id TEXT,
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY(session_id) REFERENCES sessions(id)
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS final_pseudocode (
                     id TEXT PRIMARY KEY,
                     session_id TEXT NOT NULL,
                     pseudocode TEXT NOT NULL,
+                    plain_text TEXT NOT NULL,
                     suggestions TEXT NOT NULL,
                     synced INTEGER NOT NULL DEFAULT 0,
                     cloud_id TEXT,
@@ -106,8 +119,10 @@ class LocalSQLiteRepository(TrackerRepository):
         with self._connect() as conn:
             conn.execute(
                 """
-                INSERT INTO sessions (id, user_id, started_at, ended_at, session_name, device_name, os_name,
-                                      sync_enabled, status, cloud_id, synced, created_at)
+                INSERT INTO sessions (
+                    id, user_id, started_at, ended_at, session_name, device_name, os_name,
+                    sync_enabled, status, cloud_id, synced, created_at
+                )
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
@@ -132,8 +147,8 @@ class LocalSQLiteRepository(TrackerRepository):
             conn.execute(
                 """
                 UPDATE sessions
-                SET user_id = ?, started_at = ?, ended_at = ?, session_name = ?, device_name = ?, os_name = ?,
-                    sync_enabled = ?, status = ?, cloud_id = ?, synced = ?
+                SET user_id = ?, started_at = ?, ended_at = ?, session_name = ?, device_name = ?,
+                    os_name = ?, sync_enabled = ?, status = ?, cloud_id = ?, synced = ?
                 WHERE id = ?
                 """,
                 (
@@ -156,8 +171,10 @@ class LocalSQLiteRepository(TrackerRepository):
         with self._connect() as conn:
             conn.execute(
                 """
-                INSERT OR REPLACE INTO events (id, session_id, timestamp, event_type, app_name, window_title,
-                                               metadata, synced, cloud_id, created_at)
+                INSERT OR REPLACE INTO events (
+                    id, session_id, timestamp, event_type, app_name, window_title,
+                    metadata, synced, cloud_id, created_at
+                )
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
@@ -179,8 +196,10 @@ class LocalSQLiteRepository(TrackerRepository):
         with self._connect() as conn:
             conn.execute(
                 """
-                INSERT OR REPLACE INTO screenshots (id, session_id, event_id, local_path, storage_path, ocr_text,
-                                                    captured_at, synced, created_at)
+                INSERT OR REPLACE INTO screenshots (
+                    id, session_id, event_id, local_path, storage_path, ocr_text,
+                    captured_at, synced, created_at
+                )
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
@@ -197,24 +216,54 @@ class LocalSQLiteRepository(TrackerRepository):
             )
         return screenshot
 
-    def save_summary(self, summary: Summary) -> Summary:
+    def save_chunk_summary(self, summary: ChunkSummary) -> ChunkSummary:
         with self._connect() as conn:
             conn.execute(
                 """
-                INSERT OR REPLACE INTO summaries (id, session_id, pseudocode, suggestions, synced, cloud_id, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT OR REPLACE INTO chunk_summaries (
+                    id, session_id, chunk_index, started_at, ended_at, summary,
+                    observed_apps, confidence, synced, cloud_id, created_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     summary.id,
                     summary.session_id,
-                    summary.pseudocode,
-                    json.dumps(summary.suggestions),
+                    summary.chunk_index,
+                    summary.started_at,
+                    summary.ended_at,
+                    summary.summary,
+                    json.dumps(summary.observed_apps),
+                    summary.confidence,
                     int(summary.synced),
                     summary.cloud_id,
                     summary.created_at.isoformat(),
                 ),
             )
         return summary
+
+    def save_final_pseudocode(self, final: FinalPseudocode) -> FinalPseudocode:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO final_pseudocode (
+                    id, session_id, pseudocode, plain_text, suggestions,
+                    synced, cloud_id, created_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    final.id,
+                    final.session_id,
+                    json.dumps(final.pseudocode),
+                    final.plain_text,
+                    json.dumps(final.suggestions),
+                    int(final.synced),
+                    final.cloud_id,
+                    final.created_at.isoformat(),
+                ),
+            )
+        return final
 
     def get_latest_session(self) -> Session | None:
         with self._connect() as conn:
@@ -243,14 +292,6 @@ class LocalSQLiteRepository(TrackerRepository):
             ).fetchall()
         return [self._row_to_event(row) for row in rows]
 
-    def get_summary(self, session_id: str) -> Summary | None:
-        with self._connect() as conn:
-            row = conn.execute(
-                "SELECT * FROM summaries WHERE session_id = ? ORDER BY created_at DESC LIMIT 1",
-                (session_id,),
-            ).fetchone()
-        return self._row_to_summary(row) if row else None
-
     def get_screenshots(self, session_id: str) -> list[ScreenshotRecord]:
         with self._connect() as conn:
             rows = conn.execute(
@@ -259,34 +300,56 @@ class LocalSQLiteRepository(TrackerRepository):
             ).fetchall()
         return [self._row_to_screenshot(row) for row in rows]
 
+    def get_chunk_summaries(self, session_id: str) -> list[ChunkSummary]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM chunk_summaries WHERE session_id = ? ORDER BY chunk_index ASC",
+                (session_id,),
+            ).fetchall()
+        return [self._row_to_chunk_summary(row) for row in rows]
+
+    def get_final_pseudocode(self, session_id: str) -> FinalPseudocode | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT * FROM final_pseudocode
+                WHERE session_id = ?
+                ORDER BY created_at DESC
+                LIMIT 1
+                """,
+                (session_id,),
+            ).fetchone()
+        return self._row_to_final_pseudocode(row) if row else None
+
     def list_unsynced_sessions(self) -> list[Session]:
         with self._connect() as conn:
             rows = conn.execute("SELECT * FROM sessions WHERE synced = 0").fetchall()
         return [self._row_to_session(row) for row in rows]
 
-    def list_unsynced_events(self, session_id: str) -> list[Event]:
+    def list_unsynced_chunk_summaries(self, session_id: str | None = None) -> list[ChunkSummary]:
+        query = "SELECT * FROM chunk_summaries WHERE synced = 0"
+        params: tuple[object, ...] = ()
+        if session_id:
+            query += " AND session_id = ?"
+            params = (session_id,)
+        query += " ORDER BY chunk_index ASC"
         with self._connect() as conn:
-            rows = conn.execute(
-                "SELECT * FROM events WHERE session_id = ? AND synced = 0 ORDER BY timestamp ASC",
-                (session_id,),
-            ).fetchall()
-        return [self._row_to_event(row) for row in rows]
+            rows = conn.execute(query, params).fetchall()
+        return [self._row_to_chunk_summary(row) for row in rows]
 
-    def list_unsynced_screenshots(self, session_id: str) -> list[ScreenshotRecord]:
+    def list_unsynced_final_pseudocode(
+        self,
+        session_id: str | None = None,
+    ) -> list[FinalPseudocode]:
+        query = "SELECT * FROM final_pseudocode WHERE synced = 0"
+        params: tuple[object, ...] = ()
+        if session_id:
+            query += " AND session_id = ?"
+            params = (session_id,)
+        query += " ORDER BY created_at ASC"
         with self._connect() as conn:
-            rows = conn.execute(
-                "SELECT * FROM screenshots WHERE session_id = ? AND synced = 0 ORDER BY captured_at ASC",
-                (session_id,),
-            ).fetchall()
-        return [self._row_to_screenshot(row) for row in rows]
-
-    def list_unsynced_summaries(self, session_id: str) -> list[Summary]:
-        with self._connect() as conn:
-            rows = conn.execute(
-                "SELECT * FROM summaries WHERE session_id = ? AND synced = 0 ORDER BY created_at ASC",
-                (session_id,),
-            ).fetchall()
-        return [self._row_to_summary(row) for row in rows]
+            rows = conn.execute(query, params).fetchall()
+        return [self._row_to_final_pseudocode(row) for row in rows]
 
     def mark_session_synced(self, session_id: str, cloud_id: str | None = None) -> None:
         with self._connect() as conn:
@@ -295,25 +358,26 @@ class LocalSQLiteRepository(TrackerRepository):
                 (cloud_id, session_id),
             )
 
-    def mark_event_synced(self, event_id: str, cloud_id: str | None = None) -> None:
+    def mark_chunk_summary_synced(self, summary_id: str, cloud_id: str | None = None) -> None:
         with self._connect() as conn:
             conn.execute(
-                "UPDATE events SET synced = 1, cloud_id = COALESCE(?, cloud_id) WHERE id = ?",
-                (cloud_id, event_id),
-            )
-
-    def mark_screenshot_synced(self, screenshot_id: str, storage_path: str | None = None) -> None:
-        with self._connect() as conn:
-            conn.execute(
-                "UPDATE screenshots SET synced = 1, storage_path = COALESCE(?, storage_path) WHERE id = ?",
-                (storage_path, screenshot_id),
-            )
-
-    def mark_summary_synced(self, summary_id: str, cloud_id: str | None = None) -> None:
-        with self._connect() as conn:
-            conn.execute(
-                "UPDATE summaries SET synced = 1, cloud_id = COALESCE(?, cloud_id) WHERE id = ?",
+                """
+                UPDATE chunk_summaries
+                SET synced = 1, cloud_id = COALESCE(?, cloud_id)
+                WHERE id = ?
+                """,
                 (cloud_id, summary_id),
+            )
+
+    def mark_final_pseudocode_synced(self, final_id: str, cloud_id: str | None = None) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                UPDATE final_pseudocode
+                SET synced = 1, cloud_id = COALESCE(?, cloud_id)
+                WHERE id = ?
+                """,
+                (cloud_id, final_id),
             )
 
     def _row_to_session(self, row: sqlite3.Row) -> Session:
@@ -359,11 +423,27 @@ class LocalSQLiteRepository(TrackerRepository):
             created_at=datetime.fromisoformat(row["created_at"]),
         )
 
-    def _row_to_summary(self, row: sqlite3.Row) -> Summary:
-        return Summary(
+    def _row_to_chunk_summary(self, row: sqlite3.Row) -> ChunkSummary:
+        return ChunkSummary(
             id=row["id"],
             session_id=row["session_id"],
-            pseudocode=row["pseudocode"],
+            chunk_index=row["chunk_index"],
+            started_at=row["started_at"],
+            ended_at=row["ended_at"],
+            summary=row["summary"],
+            observed_apps=json.loads(row["observed_apps"]),
+            confidence=row["confidence"],
+            synced=bool(row["synced"]),
+            cloud_id=row["cloud_id"],
+            created_at=datetime.fromisoformat(row["created_at"]),
+        )
+
+    def _row_to_final_pseudocode(self, row: sqlite3.Row) -> FinalPseudocode:
+        return FinalPseudocode(
+            id=row["id"],
+            session_id=row["session_id"],
+            pseudocode=json.loads(row["pseudocode"]),
+            plain_text=row["plain_text"],
             suggestions=json.loads(row["suggestions"]),
             synced=bool(row["synced"]),
             cloud_id=row["cloud_id"],
