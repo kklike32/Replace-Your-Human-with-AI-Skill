@@ -1,13 +1,27 @@
+@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,600..800,50&family=Nunito:wght@400;500;600;700;800&display=swap");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  color: #0b1320;
+  --background: #fdfcf8;
+  --foreground: #2c2c24;
+  --primary: #5d7052;
+  --primary-foreground: #f3f4f1;
+  --secondary: #c18c5d;
+  --secondary-foreground: #ffffff;
+  --accent: #e6dccd;
+  --accent-foreground: #44443a;
+  --muted: #f0ebe5;
+  --muted-foreground: #6b6b5f;
+  --border: #ded8cf;
+  --destructive: #a85448;
+  color: var(--foreground);
   background:
-    radial-gradient(circle at top left, rgba(15, 23, 42, 0.035), transparent 26%),
-    radial-gradient(circle at 80% 0%, rgba(15, 23, 42, 0.03), transparent 24%),
-    linear-gradient(180deg, #fafbfc 0%, #f5f7fa 56%, #eff2f6 100%);
+    radial-gradient(circle at 14% -8%, rgba(193, 140, 93, 0.18), transparent 36%),
+    radial-gradient(circle at 86% 0%, rgba(93, 112, 82, 0.15), transparent 40%),
+    linear-gradient(180deg, #fdfcf8 0%, #f8f4ed 58%, #f4eee4 100%);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -21,7 +35,10 @@
 body {
   margin: 0;
   min-height: 100vh;
+  font-family: "Nunito", "Avenir Next", "Helvetica Neue", sans-serif;
   font-feature-settings: "ss01" on, "cv10" on, "cv11" on;
+  color: var(--foreground);
+  background: transparent;
 }
 
 #root {
@@ -33,11 +50,24 @@ body::before {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  background-image:
-    linear-gradient(rgba(255, 255, 255, 0.18) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.18) 1px, transparent 1px);
-  background-size: 28px 28px;
-  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.16), transparent 78%);
+  z-index: 0;
+  opacity: 0.45;
+  background:
+    radial-gradient(circle at 22% 12%, rgba(230, 220, 205, 0.45), transparent 26%),
+    radial-gradient(circle at 76% 14%, rgba(93, 112, 82, 0.14), transparent 28%),
+    radial-gradient(circle at 80% 78%, rgba(193, 140, 93, 0.16), transparent 30%);
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.04;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180' viewBox='0 0 180 180'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='0.82' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='0.95'/%3E%3C/svg%3E");
+  background-size: 180px 180px;
 }
 
 input,
@@ -54,7 +84,7 @@ button:disabled {
 }
 
 ::selection {
-  background: rgba(15, 23, 42, 0.14);
+  background: rgba(93, 112, 82, 0.2);
 }
 
 ::-webkit-scrollbar {
@@ -62,8 +92,62 @@ button:disabled {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(11, 19, 32, 0.16);
+  background: rgba(93, 112, 82, 0.35);
   border-radius: 999px;
   border: 3px solid transparent;
   background-clip: padding-box;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: "Fraunces", ui-serif, Georgia, serif;
+  letter-spacing: -0.02em;
+}
+
+@layer components {
+  .organic-surface {
+    @apply border border-border/60 bg-[rgba(255,255,250,0.86)] shadow-soft backdrop-blur;
+  }
+
+  .organic-pill {
+    @apply rounded-full border border-border/70 bg-white/70;
+  }
+
+  .organic-input {
+    @apply h-12 w-full rounded-full border border-border bg-white/60 px-4 text-sm text-foreground outline-none transition-all duration-300 placeholder:text-muted-foreground/75 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background;
+  }
+
+  .btn-organic-primary {
+    @apply h-12 rounded-full bg-primary px-8 text-base font-bold text-primary-foreground shadow-soft transition-all duration-300 hover:scale-105 hover:shadow-[0_6px_24px_-4px_rgba(93,112,82,0.25)] active:scale-95 disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  .btn-organic-outline {
+    @apply h-12 rounded-full border-2 border-secondary bg-transparent px-8 text-base font-bold text-secondary transition-all duration-300 hover:scale-105 hover:bg-secondary/10 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  .btn-organic-ghost {
+    @apply h-12 rounded-full px-8 text-base font-bold text-primary transition-all duration-300 hover:scale-105 hover:bg-primary/10 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  .app-shell {
+    @apply relative min-h-screen px-4 py-6 text-foreground md:px-8 lg:px-10;
+  }
+
+  .app-shell-blobs {
+    @apply pointer-events-none absolute inset-0 overflow-hidden;
+  }
+
+  .app-shell-content {
+    @apply relative z-10 mx-auto max-w-[1560px];
+  }
+
+  .app-shell-tabs {
+    @apply sticky top-4 z-20 mb-5 flex justify-center lg:justify-end;
+  }
+
+  .app-shell-tab-rail {
+    @apply inline-flex rounded-full border border-border/70 bg-white/70 p-1 shadow-soft backdrop-blur-md;
+  }
 }

@@ -379,23 +379,27 @@ export default function App() {
   }
 
   return (
-    <main className="min-h-screen px-4 py-5 text-ink md:px-8 lg:px-10">
-      <div className="mx-auto max-w-[1600px]">
-        <div className="mb-4 flex justify-center lg:justify-end">
-          <div className="inline-flex rounded-full border border-white/70 bg-white/84 p-1 shadow-[0_12px_28px_rgba(15,23,42,0.06)] backdrop-blur">
+    <main className="app-shell">
+      <div className="app-shell-blobs">
+        <div className="absolute -left-28 top-8 h-64 w-64 rounded-[58%_42%_65%_35%_/_45%_55%_45%_55%] bg-primary/14 blur-3xl" />
+        <div className="absolute -right-20 top-24 h-72 w-72 rounded-[40%_60%_32%_68%_/_62%_38%_64%_36%] bg-secondary/20 blur-3xl" />
+      </div>
+      <div className="app-shell-content">
+        <div className="app-shell-tabs">
+          <div className="app-shell-tab-rail">
             <button
-              className={`rounded-full px-4 py-2 text-sm font-medium transition ${tab === "dashboard"
-                  ? "bg-slate-950 text-white"
-                  : "text-slate-600 hover:text-slate-900"
+              className={`rounded-full px-5 py-2 text-sm font-bold transition-all duration-300 ${tab === "dashboard"
+                  ? "bg-primary text-primary-foreground shadow-soft"
+                  : "text-muted-foreground hover:text-foreground"
                 }`}
               onClick={() => setTab("dashboard")}
             >
               Dashboard
             </button>
             <button
-              className={`rounded-full px-4 py-2 text-sm font-medium transition ${tab === "settings"
-                  ? "bg-slate-950 text-white"
-                  : "text-slate-600 hover:text-slate-900"
+              className={`rounded-full px-5 py-2 text-sm font-bold transition-all duration-300 ${tab === "settings"
+                  ? "bg-primary text-primary-foreground shadow-soft"
+                  : "text-muted-foreground hover:text-foreground"
                 }`}
               onClick={() => setTab("settings")}
             >

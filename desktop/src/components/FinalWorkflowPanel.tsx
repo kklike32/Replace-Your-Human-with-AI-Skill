@@ -1,4 +1,6 @@
 import type { FinalWorkflow } from "../types";
+import { CardSurface } from "./ui/CardSurface";
+import { SectionEyebrow, SectionTitle } from "./ui/Typography";
 
 type Props = {
   workflow: FinalWorkflow;
@@ -6,29 +8,25 @@ type Props = {
 
 export function FinalWorkflowPanel({ workflow }: Props) {
   return (
-    <section className="rounded-[28px] border border-white/70 bg-white/82 p-6 shadow-panel backdrop-blur">
+    <section className="organic-surface rounded-[2rem] rounded-tl-[3.25rem] p-6">
       <div className="mb-6">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-500">
-          Final Workflow
-        </p>
-        <h2 className="mt-2 text-[24px] font-semibold tracking-[-0.03em] text-slate-950">
-          Pseudocode and next action
-        </h2>
+        <SectionEyebrow>Final Workflow</SectionEyebrow>
+        <SectionTitle>Pseudocode and next action</SectionTitle>
       </div>
 
       {workflow.pseudocode.length === 0 ? (
-        <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50 p-6 text-sm text-slate-500">
+        <CardSurface className="rounded-[1.7rem] border-dashed p-6 text-sm text-muted-foreground" tone="muted">
           Final pseudocode will appear after the recorder stops, chunk summaries finish, and workflow insights are generated.
-        </div>
+        </CardSurface>
       ) : (
         <>
-          <ol className="space-y-3 text-sm leading-6 text-slate-700">
+          <ol className="space-y-3 text-sm leading-6 text-accent-foreground">
             {workflow.pseudocode.map((step, index) => (
               <li
                 key={`${index}-${step}`}
-                className="flex gap-3 rounded-[20px] border border-slate-100 bg-slate-50/55 px-4 py-4"
+                className="flex gap-3 rounded-[1.35rem] border border-border/70 bg-white/62 px-4 py-4 transition-all duration-300 hover:-translate-y-1 hover:shadow-soft"
               >
-                <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-950 text-xs font-semibold text-white">
+                <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
                   {index + 1}
                 </span>
                 <span>{step.replace(/^Step \d+\.\s*/, "")}</span>
@@ -37,28 +35,28 @@ export function FinalWorkflowPanel({ workflow }: Props) {
           </ol>
 
           <div className="mt-5 grid gap-3">
-            <div className="rounded-[20px] bg-slate-950 px-4 py-4 text-white">
-              <div className="text-[11px] uppercase tracking-[0.24em] text-slate-300">Automation score</div>
+            <CardSurface className="rounded-[1.35rem] px-4 py-4 text-primary-foreground shadow-soft" tone="primary">
+              <SectionEyebrow className="tracking-[0.24em] text-primary-foreground/70">Automation score</SectionEyebrow>
               <div className="mt-2 text-3xl font-semibold">{workflow.automationScore ?? "--"}</div>
-            </div>
-            <div className="rounded-[20px] border border-slate-100 bg-slate-50/55 px-4 py-4 text-sm text-slate-700">
-              <div className="text-[11px] uppercase tracking-[0.24em] text-slate-400">Recommended next action</div>
-              <div className="mt-2 font-medium text-slate-900">
+            </CardSurface>
+            <CardSurface className="rounded-[1.35rem] px-4 py-4 text-sm text-accent-foreground" tone="accent">
+              <SectionEyebrow className="tracking-[0.24em]">Recommended next action</SectionEyebrow>
+              <div className="mt-2 font-medium text-foreground">
                 {workflow.recommendedNextAction ?? "Pending workflow insight generation."}
               </div>
-            </div>
-            <div className="rounded-[20px] border border-slate-100 bg-slate-50/55 px-4 py-4 text-sm text-slate-700">
-              <div className="text-[11px] uppercase tracking-[0.24em] text-slate-400">Workflow template</div>
-              <div className="mt-2 font-medium text-slate-900">
+            </CardSurface>
+            <CardSurface className="rounded-[1.35rem] px-4 py-4 text-sm text-accent-foreground" tone="base">
+              <SectionEyebrow className="tracking-[0.24em]">Workflow template</SectionEyebrow>
+              <div className="mt-2 font-medium text-foreground">
                 {workflow.templateTitle ?? "Not created yet"}
               </div>
-            </div>
-            <div className="rounded-[20px] border border-slate-100 bg-slate-50/55 px-4 py-4 text-sm text-slate-700">
-              <div className="text-[11px] uppercase tracking-[0.24em] text-slate-400">Agent handoff</div>
-              <div className="mt-2 font-medium text-slate-900">
+            </CardSurface>
+            <CardSurface className="rounded-[1.35rem] px-4 py-4 text-sm text-accent-foreground" tone="base">
+              <SectionEyebrow className="tracking-[0.24em]">Agent handoff</SectionEyebrow>
+              <div className="mt-2 font-medium text-foreground">
                 {workflow.agentHandoffStatus ?? "No draft available yet"}
               </div>
-            </div>
+            </CardSurface>
           </div>
         </>
       )}

@@ -1,13 +1,14 @@
 import type { RecorderStatus } from "../types";
+import { Pill } from "./ui/Pill";
 
 const statusStyles: Record<RecorderStatus, string> = {
-  idle: "bg-white text-slate-700 ring-1 ring-slate-200",
-  recording: "bg-slate-900 text-white ring-1 ring-slate-900",
-  paused: "bg-slate-100 text-slate-800 ring-1 ring-slate-200",
-  summarizing: "bg-slate-100 text-slate-800 ring-1 ring-slate-200",
-  syncing: "bg-slate-100 text-slate-800 ring-1 ring-slate-200",
-  complete: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100",
-  error: "bg-rose-50 text-rose-700 ring-1 ring-rose-100",
+  idle: "bg-white/90 text-muted-foreground ring-1 ring-border",
+  recording: "bg-primary text-primary-foreground ring-1 ring-primary/70",
+  paused: "bg-muted text-foreground ring-1 ring-border",
+  summarizing: "bg-muted text-foreground ring-1 ring-border",
+  syncing: "bg-accent text-accent-foreground ring-1 ring-border",
+  complete: "bg-[#E8F0E5] text-[#2D4A2C] ring-1 ring-[#AEC4A3]",
+  error: "bg-[#FFF0ED] text-[#7D3A33] ring-1 ring-[#E0B3AB]",
 };
 
 type Props = {
@@ -16,10 +17,8 @@ type Props = {
 
 export function StatusBadge({ status }: Props) {
   return (
-    <span
-      className={`inline-flex items-center rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] ${statusStyles[status]}`}
-    >
+    <Pill className={statusStyles[status]}>
       {status}
-    </span>
+    </Pill>
   );
 }

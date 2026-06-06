@@ -16,21 +16,21 @@ export function RecordingControls({ status, isBusy, onStart, onStop, onPauseResu
   return (
     <div className="flex flex-wrap gap-3">
       <button
-        className="rounded-full bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:bg-slate-300"
+        className="btn-organic-primary px-6 text-sm"
         disabled={!canStart || isBusy}
         onClick={onStart}
       >
         Start recording
       </button>
       <button
-        className="rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:text-slate-900 disabled:opacity-50"
+        className="btn-organic-outline px-6 text-sm"
         disabled={canStart || isBusy}
         onClick={onStop}
       >
         Stop
       </button>
       <button
-        className="rounded-full border border-slate-200 bg-slate-50 px-5 py-3 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-100 disabled:opacity-50"
+        className="btn-organic-ghost border border-border bg-white/40 px-6 text-sm"
         disabled={!canPause || isBusy}
         onClick={onPauseResume}
       >

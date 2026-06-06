@@ -1,6 +1,9 @@
 import type { RecorderStatus } from "../types";
 import { RecordingControls } from "./RecordingControls";
 import { StatusBadge } from "./StatusBadge";
+import { CardSurface } from "./ui/CardSurface";
+import { Pill } from "./ui/Pill";
+import { SectionEyebrow } from "./ui/Typography";
 
 type Props = {
   status: RecorderStatus;
@@ -34,30 +37,28 @@ export function Dashboard({
 }: Props) {
   return (
     <div className="space-y-6">
-      <section className="rounded-[32px] border border-white/70 bg-[rgba(255,255,255,0.8)] p-6 shadow-panel backdrop-blur">
+      <section className="organic-surface relative overflow-hidden rounded-[2rem] rounded-tl-[4rem] rounded-br-[3rem] p-6 md:p-7">
+        <div className="pointer-events-none absolute -left-16 top-10 h-48 w-48 rounded-[60%_40%_30%_70%_/_60%_30%_70%_40%] bg-primary/10 blur-3xl" />
+        <div className="pointer-events-none absolute -right-16 bottom-2 h-52 w-52 rounded-[44%_56%_65%_35%_/_50%_55%_45%_50%] bg-secondary/14 blur-3xl" />
         <div className="flex flex-col gap-6">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
             <div className="max-w-3xl">
               <div className="flex flex-wrap items-center gap-3">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-500">
-                  Workflow Tracker
-                </p>
+                <SectionEyebrow>Workflow Tracker</SectionEyebrow>
                 <StatusBadge status={status} />
-                <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-medium text-slate-500">
-                  Cmd+Shift+R toggle
-                </span>
+                <Pill tone="outline" uppercase={false}>Cmd+Shift+R toggle</Pill>
               </div>
-              <h1 className="mt-4 max-w-2xl text-[38px] font-semibold tracking-[-0.05em] text-slate-950">
+              <h1 className="mt-4 max-w-2xl text-[2.15rem] font-semibold leading-tight text-foreground md:text-[2.45rem]">
                 Record desktop workflows with a simple local-first control panel.
               </h1>
-              <p className="mt-3 max-w-2xl text-[15px] leading-7 text-slate-600">
+              <p className="mt-3 max-w-2xl text-[15px] leading-7 text-muted-foreground">
                 Start and stop the Python recorder, pause when needed, and keep raw screenshots and
                 input data on-device.
               </p>
             </div>
 
             <button
-              className="rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:text-slate-900"
+              className="btn-organic-outline px-6 text-sm"
               onClick={onOpenSettings}
             >
               Settings
@@ -65,27 +66,25 @@ export function Dashboard({
           </div>
 
           <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
-            <div className="rounded-[28px] border border-slate-200 bg-slate-950 px-6 py-5 text-white">
+            <CardSurface className="rounded-[2rem] rounded-tr-[3.75rem] px-6 py-5 shadow-soft" tone="primary">
               <div className="grid gap-4 md:grid-cols-3">
                 <div>
-                  <div className="text-[11px] uppercase tracking-[0.26em] text-slate-400">Session timer</div>
-                  <div className="mt-2 text-3xl font-semibold tracking-[-0.04em]">{sessionTimer}</div>
+                  <div className="text-[11px] uppercase tracking-[0.26em] text-primary-foreground/70">Session timer</div>
+                  <div className="mt-2 text-3xl font-semibold">{sessionTimer}</div>
                 </div>
                 <div>
-                  <div className="text-[11px] uppercase tracking-[0.26em] text-slate-400">Session ID</div>
-                  <div className="mt-2 break-all text-sm leading-6 text-slate-100">{sessionId ?? "Not started"}</div>
+                  <div className="text-[11px] uppercase tracking-[0.26em] text-primary-foreground/70">Session ID</div>
+                  <div className="mt-2 break-all text-sm leading-6 text-primary-foreground">{sessionId ?? "Not started"}</div>
                 </div>
                 <div>
-                  <div className="text-[11px] uppercase tracking-[0.26em] text-slate-400">Sync status</div>
-                  <div className="mt-2 text-sm leading-6 text-slate-100">{syncLabel}</div>
+                  <div className="text-[11px] uppercase tracking-[0.26em] text-primary-foreground/70">Sync status</div>
+                  <div className="mt-2 text-sm leading-6 text-primary-foreground">{syncLabel}</div>
                 </div>
               </div>
-            </div>
+            </CardSurface>
 
-            <div className="rounded-[28px] border border-slate-200 bg-white p-5">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.26em] text-slate-500">
-                Session controls
-              </div>
+            <CardSurface className="organic-surface rounded-[2rem] rounded-bl-[3.5rem] p-5" tone="base">
+              <SectionEyebrow className="tracking-[0.26em]">Session controls</SectionEyebrow>
               <div className="mt-4 space-y-4">
                 <RecordingControls
                   status={status}
@@ -94,28 +93,26 @@ export function Dashboard({
                   onStop={onStop}
                   onPauseResume={onPauseResume}
                 />
-                <div className="text-xs leading-6 text-slate-500">
+                <div className="text-xs leading-6 text-muted-foreground">
                   <div>{metrics.screenshots} screenshots captured</div>
                   <div>{metrics.events} local events recorded</div>
                   <div>Shortcut: Cmd+Shift+R</div>
                 </div>
               </div>
-            </div>
+            </CardSurface>
           </div>
         </div>
 
         {status === "idle" ? (
-          <div className="mt-6 rounded-[28px] border border-slate-200 bg-slate-50/80 p-5">
+          <div className="mt-6 rounded-[2rem] border border-border/70 bg-muted/72 p-5">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div>
-                <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">
-                  Before you start
-                </div>
-                <div className="mt-2 text-lg font-semibold text-slate-900">
+                <SectionEyebrow className="tracking-[0.24em]">Before you start</SectionEyebrow>
+                <div className="mt-2 text-lg font-semibold text-foreground">
                   Save config, grant macOS permissions, then start a session.
                 </div>
               </div>
-              <div className="grid gap-2 text-sm text-slate-600">
+              <div className="grid gap-2 text-sm text-muted-foreground">
                 <div>1. Save capture and sync settings.</div>
                 <div>2. Allow screen recording and accessibility access.</div>
                 <div>3. Start from the button or the global shortcut.</div>
@@ -124,19 +121,19 @@ export function Dashboard({
           </div>
         ) : null}
 
-        <div className="mt-6 rounded-[24px] border border-slate-200 bg-slate-50/75 px-5 py-4 text-sm leading-7 text-slate-600">
+        <CardSurface className="mt-6 rounded-[2rem] px-5 py-4 text-sm leading-7" tone="accent">
           Raw screenshots, keystrokes, mouse events, and OCR text stay local. InsForge only receives
           summaries, pseudocode, workflow insights, templates, and agent handoff drafts.
-        </div>
+        </CardSurface>
 
         {errorMessage ? (
-          <div className="mt-6 rounded-[28px] border border-rose-200 bg-rose-50/88 p-5 text-sm text-rose-800">
+          <CardSurface className="mt-6 rounded-[2rem] p-5 text-sm" tone="danger">
             <div className="font-semibold">Recorder error</div>
             <div className="mt-2">{errorMessage}</div>
-            <div className="mt-2 text-rose-700">
+            <div className="mt-2 text-[#7D3A33]">
               Recovery suggestion: stop the session, verify `.env` values, and retry.
             </div>
-          </div>
+          </CardSurface>
         ) : null}
       </section>
     </div>
