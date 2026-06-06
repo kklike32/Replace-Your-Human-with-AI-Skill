@@ -45,7 +45,7 @@ Core modules:
 
 - `ENABLE_CLOUD_SYNC=false`
 - `ENABLE_SCREENSHOT_UPLOAD=false`
-- Tracks keyboard shortcuts only, not full typed text
+- Tracks keyboard events (printable and special keys) with privacy filters
 - Tries to avoid sensitive windows/password-like contexts
 - Pause/resume tracking with `Ctrl+Shift+P`
 

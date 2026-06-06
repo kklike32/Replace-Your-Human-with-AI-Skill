@@ -30,7 +30,7 @@ def test_insforge_client_payloads(monkeypatch):
     assert calls
     method, url, posted_json, headers, timeout = calls[0]
     assert method == "POST"
-    assert url.endswith("/v1/sessions")
+    assert url.endswith("/api/database/records/sessions")
     assert posted_json == payload
     assert headers["x-api-key"] == "test-key"
     assert "Authorization" in headers

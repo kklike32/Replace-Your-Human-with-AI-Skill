@@ -231,6 +231,26 @@ class SessionRecorder:
         key_name = self._normalize_key_name(key)
         if key_name in {"ctrl", "cmd", "alt", "shift"}:
             self.state.pressed_modifiers.discard(key_name)
+            if self.state.paused or not self.state.session_id:
+                return
+            app_name, window_title = get_active_app_context()
+            if is_sensitive_window_title(window_title):
+                return
+
+            self.repository.save_event(
+                Event(
+                    session_id=self.state.session_id,
+                    event_type=EventType.KEYBOARD_KEY,
+                    app_name=app_name,
+                    window_title=window_title,
+                    metadata={
+                        "key": key_name,
+                        "kind": "modifier",
+                        "action": "release",
+                        "modifiers": sorted(self.state.pressed_modifiers),
+                    },
+                )
+            )
             return
 
         if self.state.paused or not self.state.session_id:
@@ -243,18 +263,35 @@ class SessionRecorder:
         if is_sensitive_window_title(window_title):
             return
 
-        shortcut_parts = sorted(self.state.pressed_modifiers) + [key_name or "unknown"]
-        shortcut = "+".join(shortcut_parts)
-
+        kind = "printable" if key_name and len(key_name) == 1 else "special"
         self.repository.save_event(
             Event(
                 session_id=self.state.session_id,
-                event_type=EventType.KEYBOARD_SHORTCUT,
+                event_type=EventType.KEYBOARD_KEY,
                 app_name=app_name,
                 window_title=window_title,
-                metadata={"shortcut": shortcut},
+                metadata={
+                    "key": key_name or "unknown",
+                    "kind": kind,
+                    "action": "release",
+                    "modifiers": sorted(self.state.pressed_modifiers),
+                },
             )
         )
+
+        shortcut_parts = sorted(self.state.pressed_modifiers) + [key_name or "unknown"]
+        shortcut = "+".join(shortcut_parts)
+
+        if should_capture_shortcut(self.state.pressed_modifiers, key_name):
+            self.repository.save_event(
+                Event(
+                    session_id=self.state.session_id,
+                    event_type=EventType.KEYBOARD_SHORTCUT,
+                    app_name=app_name,
+                    window_title=window_title,
+                    metadata={"shortcut": shortcut},
+                )
+            )
 
     def _on_click(self, x: int, y: int, button: object, pressed: bool) -> None:
         if not pressed or self.state.paused or not self.state.session_id:

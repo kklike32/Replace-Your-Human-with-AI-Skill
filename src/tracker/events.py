@@ -12,6 +12,7 @@ class EventType(StrEnum):
     SESSION_START = "session_start"
     SESSION_STOP = "session_stop"
     MOUSE_CLICK = "mouse_click"
+    KEYBOARD_KEY = "keyboard_key"
     KEYBOARD_SHORTCUT = "keyboard_shortcut"
     ACTIVE_WINDOW = "active_window"
     SCREENSHOT = "screenshot"
