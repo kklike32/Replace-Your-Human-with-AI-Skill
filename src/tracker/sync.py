@@ -20,6 +20,10 @@ class SyncService:
         synced_sessions = 0
         synced_chunk_summaries = 0
         synced_final_pseudocode = 0
+        synced_workflow_insights = 0
+        synced_workflow_templates = 0
+        synced_agent_handoff_drafts = 0
+        synced_workflow_search_index_records = 0
 
         for session in self.repository.list_unsynced_sessions():
             created = self.client.create_session(
@@ -65,15 +69,90 @@ class SyncService:
             self.repository.mark_final_pseudocode_synced(final.id, created_final.get("id"))
             synced_final_pseudocode += 1
 
+        for insight in self.repository.list_unsynced_workflow_insights():
+            created_insight = self.client.upload_workflow_insight(
+                {
+                    "id": insight.id,
+                    "session_id": insight.session_id,
+                    "summary": insight.summary,
+                    "main_apps": insight.main_apps,
+                    "detected_task_type": insight.detected_task_type,
+                    "tags": insight.tags,
+                    "automation_score": insight.automation_score,
+                    "automation_reason": insight.automation_reason,
+                    "recommended_next_action": insight.recommended_next_action,
+                }
+            )
+            self.repository.mark_workflow_insight_synced(insight.id, created_insight.get("id"))
+            synced_workflow_insights += 1
+
+        for template in self.repository.list_unsynced_workflow_templates():
+            created_template = self.client.upload_workflow_template(
+                {
+                    "id": template.id,
+                    "session_id": template.session_id,
+                    "title": template.title,
+                    "description": template.description,
+                    "category": template.category,
+                    "tags": template.tags,
+                    "pseudocode": template.pseudocode,
+                    "plain_text": template.plain_text,
+                    "created_from": template.created_from,
+                }
+            )
+            self.repository.mark_workflow_template_synced(template.id, created_template.get("id"))
+            synced_workflow_templates += 1
+
+        for record in self.repository.list_unsynced_workflow_search_index_records():
+            created_record = self.client.upload_search_index_record(
+                {
+                    "id": record.id,
+                    "session_id": record.session_id,
+                    "template_id": record.template_id,
+                    "searchable_text": record.searchable_text,
+                    "tags": record.tags,
+                }
+            )
+            self.repository.mark_workflow_search_index_record_synced(
+                record.id,
+                created_record.get("id"),
+            )
+            synced_workflow_search_index_records += 1
+
+        for draft in self.repository.list_unsynced_agent_handoff_drafts():
+            created_draft = self.client.upload_agent_handoff_draft(
+                {
+                    "id": draft.id,
+                    "session_id": draft.session_id,
+                    "template_id": draft.template_id,
+                    "status": draft.status,
+                    "proposed_action": draft.proposed_action,
+                    "action_plan": draft.action_plan,
+                    "requires_user_approval": draft.requires_user_approval,
+                    "approved_at": draft.approved_at.isoformat() if draft.approved_at else None,
+                    "executed_at": draft.executed_at.isoformat() if draft.executed_at else None,
+                }
+            )
+            self.repository.mark_agent_handoff_draft_synced(draft.id, created_draft.get("id"))
+            synced_agent_handoff_drafts += 1
+
         return {
             "sessions": synced_sessions,
             "chunk_summaries": synced_chunk_summaries,
             "final_pseudocode": synced_final_pseudocode,
+            "workflow_insights": synced_workflow_insights,
+            "workflow_templates": synced_workflow_templates,
+            "workflow_search_index": synced_workflow_search_index_records,
+            "agent_handoff_queue": synced_agent_handoff_drafts,
         }
 
     def sync_session(self, session_id: str) -> dict[str, int]:
         synced_chunk_summaries = 0
         synced_final_pseudocode = 0
+        synced_workflow_insights = 0
+        synced_workflow_templates = 0
+        synced_agent_handoff_drafts = 0
+        synced_workflow_search_index_records = 0
 
         session = self.repository.get_session(session_id)
         if session and not session.synced:
@@ -119,7 +198,78 @@ class SyncService:
             self.repository.mark_final_pseudocode_synced(final.id, created_final.get("id"))
             synced_final_pseudocode += 1
 
+        for insight in self.repository.list_unsynced_workflow_insights(session_id):
+            created_insight = self.client.upload_workflow_insight(
+                {
+                    "id": insight.id,
+                    "session_id": insight.session_id,
+                    "summary": insight.summary,
+                    "main_apps": insight.main_apps,
+                    "detected_task_type": insight.detected_task_type,
+                    "tags": insight.tags,
+                    "automation_score": insight.automation_score,
+                    "automation_reason": insight.automation_reason,
+                    "recommended_next_action": insight.recommended_next_action,
+                }
+            )
+            self.repository.mark_workflow_insight_synced(insight.id, created_insight.get("id"))
+            synced_workflow_insights += 1
+
+        for template in self.repository.list_unsynced_workflow_templates(session_id):
+            created_template = self.client.upload_workflow_template(
+                {
+                    "id": template.id,
+                    "session_id": template.session_id,
+                    "title": template.title,
+                    "description": template.description,
+                    "category": template.category,
+                    "tags": template.tags,
+                    "pseudocode": template.pseudocode,
+                    "plain_text": template.plain_text,
+                    "created_from": template.created_from,
+                }
+            )
+            self.repository.mark_workflow_template_synced(template.id, created_template.get("id"))
+            synced_workflow_templates += 1
+
+        for record in self.repository.list_unsynced_workflow_search_index_records(session_id):
+            created_record = self.client.upload_search_index_record(
+                {
+                    "id": record.id,
+                    "session_id": record.session_id,
+                    "template_id": record.template_id,
+                    "searchable_text": record.searchable_text,
+                    "tags": record.tags,
+                }
+            )
+            self.repository.mark_workflow_search_index_record_synced(
+                record.id,
+                created_record.get("id"),
+            )
+            synced_workflow_search_index_records += 1
+
+        for draft in self.repository.list_unsynced_agent_handoff_drafts(session_id):
+            created_draft = self.client.upload_agent_handoff_draft(
+                {
+                    "id": draft.id,
+                    "session_id": draft.session_id,
+                    "template_id": draft.template_id,
+                    "status": draft.status,
+                    "proposed_action": draft.proposed_action,
+                    "action_plan": draft.action_plan,
+                    "requires_user_approval": draft.requires_user_approval,
+                    "approved_at": draft.approved_at.isoformat() if draft.approved_at else None,
+                    "executed_at": draft.executed_at.isoformat() if draft.executed_at else None,
+                }
+            )
+            self.repository.mark_agent_handoff_draft_synced(draft.id, created_draft.get("id"))
+            synced_agent_handoff_drafts += 1
+
         return {
             "chunk_summaries": synced_chunk_summaries,
             "final_pseudocode": synced_final_pseudocode,
+            "workflow_insights": synced_workflow_insights,
+            "workflow_templates": synced_workflow_templates,
+            "workflow_search_index": synced_workflow_search_index_records,
+            "agent_handoff_queue": synced_agent_handoff_drafts,
         }

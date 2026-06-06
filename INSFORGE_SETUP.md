@@ -39,6 +39,8 @@ InsForge never receives:
 - keyboard events
 - raw local event logs
 
+Chunk summaries and final pseudocode remain in local SQLite and are also sent to InsForge when cloud sync is enabled.
+
 ## 4) Run tracker
 
 Local-only:

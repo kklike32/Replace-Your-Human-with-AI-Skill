@@ -105,3 +105,63 @@ class FinalPseudocode:
     synced: bool = False
     cloud_id: str | None = None
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+@dataclass(slots=True)
+class WorkflowInsight:
+    session_id: str
+    summary: str
+    main_apps: list[str]
+    detected_task_type: str
+    tags: list[str]
+    automation_score: int
+    automation_reason: str
+    recommended_next_action: str
+    id: str = field(default_factory=_uuid)
+    synced: bool = False
+    cloud_id: str | None = None
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+@dataclass(slots=True)
+class WorkflowTemplate:
+    session_id: str
+    title: str
+    description: str
+    category: str
+    tags: list[str]
+    pseudocode: list[str]
+    plain_text: str
+    created_from: str = "session_summary"
+    id: str = field(default_factory=_uuid)
+    synced: bool = False
+    cloud_id: str | None = None
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+@dataclass(slots=True)
+class AgentHandoffDraft:
+    session_id: str
+    template_id: str | None
+    status: str
+    proposed_action: str
+    action_plan: list[str]
+    requires_user_approval: bool = True
+    id: str = field(default_factory=_uuid)
+    synced: bool = False
+    cloud_id: str | None = None
+    approved_at: datetime | None = None
+    executed_at: datetime | None = None
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+@dataclass(slots=True)
+class WorkflowSearchIndexRecord:
+    session_id: str
+    template_id: str | None
+    searchable_text: str
+    tags: list[str]
+    id: str = field(default_factory=_uuid)
+    synced: bool = False
+    cloud_id: str | None = None
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))

@@ -6,17 +6,30 @@ from datetime import datetime
 from pathlib import Path
 
 from tracker.events import (
+    AgentHandoffDraft,
     ChunkSummary,
     Event,
     EventType,
     FinalPseudocode,
     ScreenshotRecord,
     Session,
+    WorkflowInsight,
+    WorkflowSearchIndexRecord,
+    WorkflowTemplate,
 )
 from tracker.storage.repository import TrackerRepository
 
 
 class LocalSQLiteRepository(TrackerRepository):
+    PURGEABLE_EVENT_TYPES = (
+        EventType.MOUSE_CLICK.value,
+        EventType.KEYBOARD_KEY.value,
+        EventType.KEYBOARD_SHORTCUT.value,
+        EventType.ACTIVE_WINDOW.value,
+        EventType.SCREENSHOT.value,
+        EventType.OCR_TEXT.value,
+    )
+
     def __init__(self, db_path: Path):
         self.db_path = db_path
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -111,6 +124,80 @@ class LocalSQLiteRepository(TrackerRepository):
                     cloud_id TEXT,
                     created_at TEXT NOT NULL,
                     FOREIGN KEY(session_id) REFERENCES sessions(id)
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS workflow_insights (
+                    id TEXT PRIMARY KEY,
+                    session_id TEXT NOT NULL,
+                    summary TEXT NOT NULL,
+                    main_apps TEXT NOT NULL,
+                    detected_task_type TEXT NOT NULL,
+                    tags TEXT NOT NULL,
+                    automation_score INTEGER NOT NULL,
+                    automation_reason TEXT NOT NULL,
+                    recommended_next_action TEXT NOT NULL,
+                    synced INTEGER NOT NULL DEFAULT 0,
+                    cloud_id TEXT,
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY(session_id) REFERENCES sessions(id)
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS workflow_templates (
+                    id TEXT PRIMARY KEY,
+                    session_id TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    description TEXT,
+                    category TEXT,
+                    tags TEXT NOT NULL,
+                    pseudocode TEXT NOT NULL,
+                    plain_text TEXT NOT NULL,
+                    created_from TEXT NOT NULL DEFAULT 'session_summary',
+                    synced INTEGER NOT NULL DEFAULT 0,
+                    cloud_id TEXT,
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY(session_id) REFERENCES sessions(id)
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS agent_handoff_queue (
+                    id TEXT PRIMARY KEY,
+                    session_id TEXT NOT NULL,
+                    template_id TEXT,
+                    status TEXT NOT NULL,
+                    proposed_action TEXT NOT NULL,
+                    action_plan TEXT NOT NULL,
+                    requires_user_approval INTEGER NOT NULL DEFAULT 1,
+                    approved_at TEXT,
+                    executed_at TEXT,
+                    synced INTEGER NOT NULL DEFAULT 0,
+                    cloud_id TEXT,
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY(session_id) REFERENCES sessions(id),
+                    FOREIGN KEY(template_id) REFERENCES workflow_templates(id)
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS workflow_search_index (
+                    id TEXT PRIMARY KEY,
+                    session_id TEXT NOT NULL,
+                    template_id TEXT,
+                    searchable_text TEXT NOT NULL,
+                    tags TEXT NOT NULL,
+                    synced INTEGER NOT NULL DEFAULT 0,
+                    cloud_id TEXT,
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY(session_id) REFERENCES sessions(id),
+                    FOREIGN KEY(template_id) REFERENCES workflow_templates(id)
                 )
                 """
             )
@@ -265,6 +352,115 @@ class LocalSQLiteRepository(TrackerRepository):
             )
         return final
 
+    def save_workflow_insight(self, insight: WorkflowInsight) -> WorkflowInsight:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO workflow_insights (
+                    id, session_id, summary, main_apps, detected_task_type, tags,
+                    automation_score, automation_reason, recommended_next_action,
+                    synced, cloud_id, created_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    insight.id,
+                    insight.session_id,
+                    insight.summary,
+                    json.dumps(insight.main_apps),
+                    insight.detected_task_type,
+                    json.dumps(insight.tags),
+                    insight.automation_score,
+                    insight.automation_reason,
+                    insight.recommended_next_action,
+                    int(insight.synced),
+                    insight.cloud_id,
+                    insight.created_at.isoformat(),
+                ),
+            )
+        return insight
+
+    def save_workflow_template(self, template: WorkflowTemplate) -> WorkflowTemplate:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO workflow_templates (
+                    id, session_id, title, description, category, tags, pseudocode,
+                    plain_text, created_from, synced, cloud_id, created_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    template.id,
+                    template.session_id,
+                    template.title,
+                    template.description,
+                    template.category,
+                    json.dumps(template.tags),
+                    json.dumps(template.pseudocode),
+                    template.plain_text,
+                    template.created_from,
+                    int(template.synced),
+                    template.cloud_id,
+                    template.created_at.isoformat(),
+                ),
+            )
+        return template
+
+    def save_agent_handoff_draft(self, draft: AgentHandoffDraft) -> AgentHandoffDraft:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO agent_handoff_queue (
+                    id, session_id, template_id, status, proposed_action, action_plan,
+                    requires_user_approval, approved_at, executed_at,
+                    synced, cloud_id, created_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    draft.id,
+                    draft.session_id,
+                    draft.template_id,
+                    draft.status,
+                    draft.proposed_action,
+                    json.dumps(draft.action_plan),
+                    int(draft.requires_user_approval),
+                    draft.approved_at.isoformat() if draft.approved_at else None,
+                    draft.executed_at.isoformat() if draft.executed_at else None,
+                    int(draft.synced),
+                    draft.cloud_id,
+                    draft.created_at.isoformat(),
+                ),
+            )
+        return draft
+
+    def save_workflow_search_index(
+        self,
+        record: WorkflowSearchIndexRecord,
+    ) -> WorkflowSearchIndexRecord:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO workflow_search_index (
+                    id, session_id, template_id, searchable_text, tags,
+                    synced, cloud_id, created_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    record.id,
+                    record.session_id,
+                    record.template_id,
+                    record.searchable_text,
+                    json.dumps(record.tags),
+                    int(record.synced),
+                    record.cloud_id,
+                    record.created_at.isoformat(),
+                ),
+            )
+        return record
+
     def get_latest_session(self) -> Session | None:
         with self._connect() as conn:
             row = conn.execute(
@@ -321,6 +517,66 @@ class LocalSQLiteRepository(TrackerRepository):
             ).fetchone()
         return self._row_to_final_pseudocode(row) if row else None
 
+    def get_workflow_insight(self, session_id: str) -> WorkflowInsight | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT * FROM workflow_insights
+                WHERE session_id = ?
+                ORDER BY created_at DESC
+                LIMIT 1
+                """,
+                (session_id,),
+            ).fetchone()
+        return self._row_to_workflow_insight(row) if row else None
+
+    def get_workflow_template(self, template_id: str) -> WorkflowTemplate | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM workflow_templates WHERE id = ?",
+                (template_id,),
+            ).fetchone()
+        return self._row_to_workflow_template(row) if row else None
+
+    def get_latest_workflow_template_for_session(self, session_id: str) -> WorkflowTemplate | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT * FROM workflow_templates
+                WHERE session_id = ?
+                ORDER BY created_at DESC
+                LIMIT 1
+                """,
+                (session_id,),
+            ).fetchone()
+        return self._row_to_workflow_template(row) if row else None
+
+    def get_agent_handoff_draft(self, session_id: str) -> AgentHandoffDraft | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT * FROM agent_handoff_queue
+                WHERE session_id = ?
+                ORDER BY created_at DESC
+                LIMIT 1
+                """,
+                (session_id,),
+            ).fetchone()
+        return self._row_to_agent_handoff_draft(row) if row else None
+
+    def get_workflow_search_index_record(self, session_id: str) -> WorkflowSearchIndexRecord | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT * FROM workflow_search_index
+                WHERE session_id = ?
+                ORDER BY created_at DESC
+                LIMIT 1
+                """,
+                (session_id,),
+            ).fetchone()
+        return self._row_to_workflow_search_index_record(row) if row else None
+
     def list_unsynced_sessions(self) -> list[Session]:
         with self._connect() as conn:
             rows = conn.execute("SELECT * FROM sessions WHERE synced = 0").fetchall()
@@ -351,6 +607,90 @@ class LocalSQLiteRepository(TrackerRepository):
             rows = conn.execute(query, params).fetchall()
         return [self._row_to_final_pseudocode(row) for row in rows]
 
+    def list_unsynced_workflow_insights(
+        self,
+        session_id: str | None = None,
+    ) -> list[WorkflowInsight]:
+        query = "SELECT * FROM workflow_insights WHERE synced = 0"
+        params: tuple[object, ...] = ()
+        if session_id:
+            query += " AND session_id = ?"
+            params = (session_id,)
+        query += " ORDER BY created_at ASC"
+        with self._connect() as conn:
+            rows = conn.execute(query, params).fetchall()
+        return [self._row_to_workflow_insight(row) for row in rows]
+
+    def list_unsynced_workflow_templates(
+        self,
+        session_id: str | None = None,
+    ) -> list[WorkflowTemplate]:
+        query = "SELECT * FROM workflow_templates WHERE synced = 0"
+        params: tuple[object, ...] = ()
+        if session_id:
+            query += " AND session_id = ?"
+            params = (session_id,)
+        query += " ORDER BY created_at ASC"
+        with self._connect() as conn:
+            rows = conn.execute(query, params).fetchall()
+        return [self._row_to_workflow_template(row) for row in rows]
+
+    def list_unsynced_agent_handoff_drafts(
+        self,
+        session_id: str | None = None,
+    ) -> list[AgentHandoffDraft]:
+        query = "SELECT * FROM agent_handoff_queue WHERE synced = 0"
+        params: tuple[object, ...] = ()
+        if session_id:
+            query += " AND session_id = ?"
+            params = (session_id,)
+        query += " ORDER BY created_at ASC"
+        with self._connect() as conn:
+            rows = conn.execute(query, params).fetchall()
+        return [self._row_to_agent_handoff_draft(row) for row in rows]
+
+    def list_unsynced_workflow_search_index_records(
+        self,
+        session_id: str | None = None,
+    ) -> list[WorkflowSearchIndexRecord]:
+        query = "SELECT * FROM workflow_search_index WHERE synced = 0"
+        params: tuple[object, ...] = ()
+        if session_id:
+            query += " AND session_id = ?"
+            params = (session_id,)
+        query += " ORDER BY created_at ASC"
+        with self._connect() as conn:
+            rows = conn.execute(query, params).fetchall()
+        return [self._row_to_workflow_search_index_record(row) for row in rows]
+
+    def list_workflow_templates(self, limit: int = 20) -> list[WorkflowTemplate]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM workflow_templates
+                ORDER BY created_at DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        return [self._row_to_workflow_template(row) for row in rows]
+
+    def search_workflow_templates(self, query: str, limit: int = 10) -> list[WorkflowTemplate]:
+        pattern = f"%{query.lower()}%"
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT wt.*
+                FROM workflow_search_index wsi
+                JOIN workflow_templates wt ON wt.id = wsi.template_id
+                WHERE lower(wsi.searchable_text) LIKE ?
+                ORDER BY wsi.created_at DESC
+                LIMIT ?
+                """,
+                (pattern, limit),
+            ).fetchall()
+        return [self._row_to_workflow_template(row) for row in rows]
+
     def mark_session_synced(self, session_id: str, cloud_id: str | None = None) -> None:
         with self._connect() as conn:
             conn.execute(
@@ -379,6 +719,100 @@ class LocalSQLiteRepository(TrackerRepository):
                 """,
                 (cloud_id, final_id),
             )
+
+    def mark_workflow_insight_synced(self, insight_id: str, cloud_id: str | None = None) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                UPDATE workflow_insights
+                SET synced = 1, cloud_id = COALESCE(?, cloud_id)
+                WHERE id = ?
+                """,
+                (cloud_id, insight_id),
+            )
+
+    def mark_workflow_template_synced(self, template_id: str, cloud_id: str | None = None) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                UPDATE workflow_templates
+                SET synced = 1, cloud_id = COALESCE(?, cloud_id)
+                WHERE id = ?
+                """,
+                (cloud_id, template_id),
+            )
+
+    def mark_agent_handoff_draft_synced(
+        self,
+        draft_id: str,
+        cloud_id: str | None = None,
+    ) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                UPDATE agent_handoff_queue
+                SET synced = 1, cloud_id = COALESCE(?, cloud_id)
+                WHERE id = ?
+                """,
+                (cloud_id, draft_id),
+            )
+
+    def mark_workflow_search_index_record_synced(
+        self,
+        record_id: str,
+        cloud_id: str | None = None,
+    ) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                UPDATE workflow_search_index
+                SET synced = 1, cloud_id = COALESCE(?, cloud_id)
+                WHERE id = ?
+                """,
+                (cloud_id, record_id),
+            )
+
+    def purge_expired_raw_data(self, session_id: str, cutoff: datetime) -> dict[str, int]:
+        screenshot_paths = [
+            Path(record.local_path)
+            for record in self.get_screenshots(session_id)
+            if record.captured_at <= cutoff
+        ]
+
+        with self._connect() as conn:
+            screenshots_deleted = conn.execute(
+                """
+                DELETE FROM screenshots
+                WHERE session_id = ? AND captured_at <= ?
+                """,
+                (session_id, cutoff.isoformat()),
+            ).rowcount
+
+            placeholders = ",".join("?" for _ in self.PURGEABLE_EVENT_TYPES)
+            events_deleted = conn.execute(
+                f"""
+                DELETE FROM events
+                WHERE session_id = ?
+                  AND timestamp <= ?
+                  AND event_type IN ({placeholders})
+                """,
+                (session_id, cutoff.isoformat(), *self.PURGEABLE_EVENT_TYPES),
+            ).rowcount
+
+        files_deleted = 0
+        for path in screenshot_paths:
+            try:
+                if path.exists():
+                    path.unlink()
+                    files_deleted += 1
+            except OSError:
+                continue
+
+        return {
+            "screenshots_deleted": screenshots_deleted,
+            "event_rows_deleted": events_deleted,
+            "screenshot_files_deleted": files_deleted,
+        }
 
     def _row_to_session(self, row: sqlite3.Row) -> Session:
         return Session(
@@ -445,6 +879,69 @@ class LocalSQLiteRepository(TrackerRepository):
             pseudocode=json.loads(row["pseudocode"]),
             plain_text=row["plain_text"],
             suggestions=json.loads(row["suggestions"]),
+            synced=bool(row["synced"]),
+            cloud_id=row["cloud_id"],
+            created_at=datetime.fromisoformat(row["created_at"]),
+        )
+
+    def _row_to_workflow_insight(self, row: sqlite3.Row) -> WorkflowInsight:
+        return WorkflowInsight(
+            id=row["id"],
+            session_id=row["session_id"],
+            summary=row["summary"],
+            main_apps=json.loads(row["main_apps"]),
+            detected_task_type=row["detected_task_type"],
+            tags=json.loads(row["tags"]),
+            automation_score=row["automation_score"],
+            automation_reason=row["automation_reason"],
+            recommended_next_action=row["recommended_next_action"],
+            synced=bool(row["synced"]),
+            cloud_id=row["cloud_id"],
+            created_at=datetime.fromisoformat(row["created_at"]),
+        )
+
+    def _row_to_workflow_template(self, row: sqlite3.Row) -> WorkflowTemplate:
+        return WorkflowTemplate(
+            id=row["id"],
+            session_id=row["session_id"],
+            title=row["title"],
+            description=row["description"],
+            category=row["category"],
+            tags=json.loads(row["tags"]),
+            pseudocode=json.loads(row["pseudocode"]),
+            plain_text=row["plain_text"],
+            created_from=row["created_from"],
+            synced=bool(row["synced"]),
+            cloud_id=row["cloud_id"],
+            created_at=datetime.fromisoformat(row["created_at"]),
+        )
+
+    def _row_to_agent_handoff_draft(self, row: sqlite3.Row) -> AgentHandoffDraft:
+        return AgentHandoffDraft(
+            id=row["id"],
+            session_id=row["session_id"],
+            template_id=row["template_id"],
+            status=row["status"],
+            proposed_action=row["proposed_action"],
+            action_plan=json.loads(row["action_plan"]),
+            requires_user_approval=bool(row["requires_user_approval"]),
+            synced=bool(row["synced"]),
+            cloud_id=row["cloud_id"],
+            approved_at=datetime.fromisoformat(row["approved_at"]) if row["approved_at"] else None,
+            executed_at=datetime.fromisoformat(row["executed_at"]) if row["executed_at"] else None,
+            created_at=datetime.fromisoformat(row["created_at"]),
+        )
+
+    def _row_to_workflow_search_index_record(
+        self,
+        row: sqlite3.Row,
+    ) -> WorkflowSearchIndexRecord:
+        return WorkflowSearchIndexRecord(
+            id=row["id"],
+            session_id=row["session_id"],
+            template_id=row["template_id"],
+            searchable_text=row["searchable_text"],
+            tags=json.loads(row["tags"]),
             synced=bool(row["synced"]),
             cloud_id=row["cloud_id"],
             created_at=datetime.fromisoformat(row["created_at"]),

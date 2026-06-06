@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Optional
 
 import typer
 from rich.console import Console
 from rich.panel import Panel
+from rich.table import Table
 
 from .config import TrackerConfig
 from .llm import build_llm_client
@@ -14,8 +16,11 @@ from .storage.insforge_client import InsForgeClient
 from .storage.local_sqlite import LocalSQLiteRepository
 from .summarization import generate_final_pseudocode
 from .sync import SyncService
+from .workflows import build_workflow_artifacts
 
 app = typer.Typer(help="Track desktop usage sessions and summarize workflows.")
+workflows_app = typer.Typer(help="Inspect privacy-safe workflow intelligence records.")
+app.add_typer(workflows_app, name="workflows")
 console = Console()
 
 
@@ -89,11 +94,59 @@ create table if not exists final_pseudocode (
   suggestions jsonb nullable,
   created_at timestamptz default now()
 );
+
+create table if not exists workflow_templates (
+  id uuid primary key,
+  session_id uuid references sessions(id),
+  title text not null,
+  description text nullable,
+  category text nullable,
+  tags jsonb default '[]'::jsonb,
+  pseudocode jsonb not null,
+  plain_text text not null,
+  created_from text default 'session_summary',
+  created_at timestamptz default now()
+);
+
+create table if not exists workflow_insights (
+  id uuid primary key,
+  session_id uuid references sessions(id),
+  summary text not null,
+  main_apps jsonb default '[]'::jsonb,
+  detected_task_type text nullable,
+  tags jsonb default '[]'::jsonb,
+  automation_score integer not null,
+  automation_reason text nullable,
+  recommended_next_action text nullable,
+  created_at timestamptz default now()
+);
+
+create table if not exists agent_handoff_queue (
+  id uuid primary key,
+  session_id uuid references sessions(id),
+  template_id uuid nullable references workflow_templates(id),
+  status text default 'draft',
+  proposed_action text not null,
+  action_plan jsonb not null,
+  requires_user_approval boolean default true,
+  approved_at timestamptz nullable,
+  executed_at timestamptz nullable,
+  created_at timestamptz default now()
+);
+
+create table if not exists workflow_search_index (
+  id uuid primary key,
+  session_id uuid references sessions(id),
+  template_id uuid nullable references workflow_templates(id),
+  searchable_text text not null,
+  tags jsonb default '[]'::jsonb,
+  created_at timestamptz default now()
+);
 """
 
 
 def _setup_markdown() -> str:
-    return """# Privacy-First Backend Setup
+    return """# Privacy-Safe Workflow Intelligence Backend
 
 ## Remote data model
 
@@ -102,9 +155,14 @@ InsForge stores only:
 - session metadata
 - 6-second chunk summaries
 - final pseudocode
-- optional suggestions in final pseudocode
+- workflow insights
+- workflow templates
+- workflow search records
+- automation scores
+- suggested next actions
+- draft agent handoff plans
 
-InsForge does not store raw screenshots, OCR text, mouse events, keyboard events, or local event logs.
+InsForge does not store screenshots, OCR text, mouse events, keyboard events, or local event logs.
 
 ## Environment
 
@@ -122,12 +180,65 @@ Start local capture:
 tracker start --llm-provider mock
 ```
 
-Enable remote summary sync:
+Enable the privacy-safe workflow intelligence backend:
 
 ```bash
 tracker start --cloud-sync --llm-provider vertex_gemini
 ```
 """
+
+
+def _render_template_table(records: list[object]) -> None:
+    table = Table(title="Workflow Templates")
+    table.add_column("Title")
+    table.add_column("Category")
+    table.add_column("Automation Score")
+    table.add_column("Created At")
+    for record in records:
+        created_at = getattr(record, "created_at", "") or ""
+        automation_score = getattr(record, "automation_score", "")
+        table.add_row(
+            str(getattr(record, "title", "")),
+            str(getattr(record, "category", "")),
+            str(automation_score),
+            str(created_at),
+        )
+    console.print(table)
+
+
+def _generate_workflow_outputs(
+    config: TrackerConfig,
+    repository: LocalSQLiteRepository,
+    session_id: str,
+) -> tuple[object, object | None, object, object | None]:
+    summaries = repository.get_chunk_summaries(session_id)
+    if not summaries:
+        raise typer.BadParameter(f"No chunk summaries found for session {session_id}.")
+    final = repository.get_final_pseudocode(session_id)
+    if final is None:
+        raise typer.BadParameter(f"No final pseudocode found for session {session_id}.")
+
+    artifacts = build_workflow_artifacts(
+        final,
+        summaries,
+        enable_template_creation=config.enable_workflow_template_creation,
+        enable_agent_handoff_drafts=config.enable_agent_handoff_drafts,
+        handoff_threshold=config.agent_handoff_automation_score_threshold,
+    )
+    insight = repository.save_workflow_insight(artifacts.insight)
+    template = None
+    if artifacts.template is not None:
+        template = repository.save_workflow_template(artifacts.template)
+        artifacts.search_index.template_id = template.id
+    search_record = repository.save_workflow_search_index(artifacts.search_index)
+    handoff = None
+    if artifacts.handoff_draft is not None:
+        handoff = repository.save_agent_handoff_draft(artifacts.handoff_draft)
+
+    client = _maybe_client(config)
+    if client:
+        SyncService(repository, client, config).sync_session(session_id)
+    return insight, template, search_record, handoff
 
 
 @app.command("init-backend")
@@ -222,10 +333,7 @@ def summarize_final(
 
     final = generate_final_pseudocode(build_llm_client(config, config.llm_provider), summaries)
     repository.save_final_pseudocode(final)
-
-    client = _maybe_client(config)
-    if client:
-        SyncService(repository, client, config).sync_session(chosen_session_id)
+    _generate_workflow_outputs(config, repository, chosen_session_id)
     console.print(Panel.fit(final.plain_text, title=f"Session {chosen_session_id} Final Pseudocode"))
 
 
@@ -244,21 +352,21 @@ def sync_summaries(
     session_id: str = typer.Option(..., help="Session ID to sync."),
     db_path: Optional[str] = typer.Option(None, help="Path to local SQLite DB."),
 ) -> None:
-    """Upload chunk summaries and final pseudocode for one session."""
+    """Upload privacy-safe workflow records for one session."""
     config = _build_config(db_path, cloud_sync=True)
     client = _maybe_client(config)
     if client is None:
         raise typer.BadParameter("Missing InsForge credentials in environment.")
     repository = LocalSQLiteRepository(config.db_path)
     result = SyncService(repository, client, config).sync_session(session_id)
-    console.print(f"[bold green]Summary sync complete:[/bold green] {result}")
+    console.print(f"[bold green]Workflow sync complete:[/bold green] {result}")
 
 
 @app.command()
 def sync(
     db_path: Optional[str] = typer.Option(None, help="Path to local SQLite DB."),
 ) -> None:
-    """Upload unsynced sessions, chunk summaries, and final pseudocode."""
+    """Upload unsynced sessions, summaries, workflow records, and final pseudocode."""
     config = _build_config(db_path, cloud_sync=True)
     client = _maybe_client(config)
     if client is None:
@@ -298,6 +406,152 @@ def export(
     )
     output_path.write_text(markdown, encoding="utf-8")
     console.print(f"[bold green]Exported:[/bold green] {output_path}")
+
+
+@workflows_app.command("list")
+def workflows_list(
+    db_path: Optional[str] = typer.Option(None, help="Path to local SQLite DB."),
+    limit: int = typer.Option(10, help="Maximum workflows to display."),
+) -> None:
+    """Show recent synced workflows from InsForge, or local templates as fallback."""
+    config = _build_config(db_path, cloud_sync=True)
+    repository = LocalSQLiteRepository(config.db_path)
+    client = _maybe_client(config)
+    records: list[object] = []
+    if client:
+        templates = client.list_workflow_templates(limit=limit)
+        for template in templates:
+            session_id = str(template.get("session_id", ""))
+            insights = client.list_workflow_insights(session_id=session_id, limit=1) if session_id else []
+            template["automation_score"] = insights[0].get("automation_score", "") if insights else ""
+            records.append(SimpleNamespace(**template))
+    else:
+        templates = repository.list_workflow_templates(limit=limit)
+        for template in templates:
+            insight = repository.get_workflow_insight(template.session_id)
+            setattr(template, "automation_score", insight.automation_score if insight else "")
+            records.append(template)
+    _render_template_table(records)
+
+
+@workflows_app.command("search")
+def workflows_search(
+    query: str,
+    db_path: Optional[str] = typer.Option(None, help="Path to local SQLite DB."),
+    limit: int = typer.Option(10, help="Maximum workflows to display."),
+) -> None:
+    """Search privacy-safe workflow history."""
+    config = _build_config(db_path, cloud_sync=True)
+    repository = LocalSQLiteRepository(config.db_path)
+    client = _maybe_client(config)
+    if client:
+        matches = client.search_workflows(query, limit=limit)
+        template_ids = [match.get("template_id") for match in matches if match.get("template_id")]
+        templates = [client.get_workflow_template(str(template_id)) for template_id in template_ids]
+        records = [SimpleNamespace(**template) for template in templates if template]
+    else:
+        records = repository.search_workflow_templates(query, limit=limit)
+    _render_template_table(records)
+
+
+@workflows_app.command("show")
+def workflows_show(
+    workflow_id: str,
+    db_path: Optional[str] = typer.Option(None, help="Path to local SQLite DB."),
+) -> None:
+    """Show a workflow template, pseudocode, and insight details."""
+    config = _build_config(db_path)
+    repository = LocalSQLiteRepository(config.db_path)
+    template = repository.get_workflow_template(workflow_id)
+    if template is None:
+        raise typer.BadParameter(f"No workflow template found for id {workflow_id}.")
+    insight = repository.get_workflow_insight(template.session_id)
+    console.print(Panel.fit(template.plain_text, title=template.title))
+    if insight:
+        console.print(
+            Panel.fit(
+                (
+                    f"Summary: {insight.summary}\n"
+                    f"Automation Score: {insight.automation_score}\n"
+                    f"Reason: {insight.automation_reason}\n"
+                    f"Next Action: {insight.recommended_next_action}\n"
+                    f"Tags: {', '.join(insight.tags)}"
+                ),
+                title="Workflow Insight",
+            )
+        )
+
+
+@workflows_app.command("templates")
+def workflows_templates(
+    db_path: Optional[str] = typer.Option(None, help="Path to local SQLite DB."),
+    limit: int = typer.Option(10, help="Maximum templates to display."),
+) -> None:
+    """List reusable workflow templates."""
+    config = _build_config(db_path)
+    repository = LocalSQLiteRepository(config.db_path)
+    _render_template_table(repository.list_workflow_templates(limit=limit))
+
+
+@workflows_app.command("insights")
+def workflows_insights(
+    session_id: str = typer.Option(..., help="Session ID to inspect."),
+    db_path: Optional[str] = typer.Option(None, help="Path to local SQLite DB."),
+) -> None:
+    """Generate or display workflow insight for a session."""
+    config = _build_config(db_path, cloud_sync=True)
+    repository = LocalSQLiteRepository(config.db_path)
+    insight = repository.get_workflow_insight(session_id)
+    if insight is None:
+        insight, _template, _search_record, _handoff = _generate_workflow_outputs(
+            config,
+            repository,
+            session_id,
+        )
+    console.print(
+        Panel.fit(
+            (
+                f"Summary: {insight.summary}\n"
+                f"Main Apps: {', '.join(insight.main_apps)}\n"
+                f"Task Type: {insight.detected_task_type}\n"
+                f"Automation Score: {insight.automation_score}\n"
+                f"Reason: {insight.automation_reason}\n"
+                f"Next Action: {insight.recommended_next_action}"
+            ),
+            title=f"Workflow Insight {session_id}",
+        )
+    )
+
+
+@workflows_app.command("handoff")
+def workflows_handoff(
+    session_id: str = typer.Option(..., help="Session ID to inspect."),
+    db_path: Optional[str] = typer.Option(None, help="Path to local SQLite DB."),
+) -> None:
+    """Create or display a review-only agent handoff draft."""
+    config = _build_config(db_path, cloud_sync=True)
+    repository = LocalSQLiteRepository(config.db_path)
+    draft = repository.get_agent_handoff_draft(session_id)
+    if draft is None:
+        _insight, _template, _search_record, draft = _generate_workflow_outputs(
+            config,
+            repository,
+            session_id,
+        )
+    if draft is None:
+        console.print("No handoff draft generated. Automation score is below threshold.")
+        return
+    console.print(
+        Panel.fit(
+            (
+                f"Status: {draft.status}\n"
+                f"Requires Approval: {draft.requires_user_approval}\n"
+                f"Proposed Action: {draft.proposed_action}\n"
+                f"Action Plan:\n- " + "\n- ".join(draft.action_plan)
+            ),
+            title=f"Agent Handoff Draft {session_id}",
+        )
+    )
 
 
 def main() -> None:

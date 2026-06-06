@@ -51,16 +51,68 @@ def test_insforge_client_summary_only_payloads(monkeypatch):
         "plain_text": "1. Review the page.",
         "suggestions": ["Pin the document."],
     }
+    insight_payload = {
+        "id": "insight-1",
+        "session_id": "session-1",
+        "summary": "The user reviewed a browser page and documented the steps.",
+        "main_apps": ["Chrome"],
+        "detected_task_type": "browser_admin_workflow",
+        "tags": ["browser", "automation_candidate"],
+        "automation_score": 78,
+        "automation_reason": "The workflow is repetitive and structured.",
+        "recommended_next_action": "Create a reusable workflow template and draft a Python automation plan.",
+    }
+    template_payload = {
+        "id": "template-1",
+        "session_id": "session-1",
+        "title": "Review the page",
+        "description": "A reusable workflow for reviewing a page.",
+        "category": "browser_admin_workflow",
+        "tags": ["browser", "automation_candidate"],
+        "pseudocode": ["Step 1. Review the page."],
+        "plain_text": "1. Review the page.",
+        "created_from": "session_summary",
+    }
+    handoff_payload = {
+        "id": "handoff-1",
+        "session_id": "session-1",
+        "template_id": "template-1",
+        "status": "draft",
+        "proposed_action": "Turn the workflow into a reusable automation.",
+        "action_plan": ["Review inputs", "Create a dry-run automation plan"],
+        "requires_user_approval": True,
+        "approved_at": None,
+        "executed_at": None,
+    }
+    search_payload = {
+        "id": "search-1",
+        "session_id": "session-1",
+        "template_id": "template-1",
+        "searchable_text": "review page browser automation",
+        "tags": ["browser", "automation_candidate"],
+    }
 
     client.create_session(session_payload)
     client.upload_chunk_summary(summary_payload)
     client.upload_final_pseudocode(final_payload)
+    client.upload_workflow_insight(insight_payload)
+    client.upload_workflow_template(template_payload)
+    client.upload_agent_handoff_draft(handoff_payload)
+    client.upload_search_index_record(search_payload)
 
     assert calls[0][1].endswith("/api/database/records/sessions")
     assert calls[1][1].endswith("/api/database/records/chunk_summaries")
     assert calls[2][1].endswith("/api/database/records/final_pseudocode")
+    assert calls[3][1].endswith("/api/database/records/workflow_insights")
+    assert calls[4][1].endswith("/api/database/records/workflow_templates")
+    assert calls[5][1].endswith("/api/database/records/agent_handoff_queue")
+    assert calls[6][1].endswith("/api/database/records/workflow_search_index")
     assert calls[1][2] == summary_payload
     assert calls[2][2] == final_payload
+    assert calls[3][2] == insight_payload
+    assert calls[4][2] == template_payload
+    assert calls[5][2] == handoff_payload
+    assert calls[6][2] == search_payload
 
 
 def test_insforge_client_rejects_raw_activity_payloads():
@@ -78,5 +130,17 @@ def test_insforge_client_rejects_raw_activity_payloads():
                 "observed_apps": ["Chrome"],
                 "confidence": "high",
                 "ocr_text": ["secret"],
+            }
+        )
+
+    with pytest.raises(ValueError):
+        client.upload_search_index_record(
+            {
+                "id": "search-1",
+                "session_id": "session-1",
+                "template_id": "template-1",
+                "searchable_text": "safe summary",
+                "tags": ["browser"],
+                "raw_events": [{"event_type": "mouse_click"}],
             }
         )

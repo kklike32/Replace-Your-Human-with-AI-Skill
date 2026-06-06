@@ -3,7 +3,7 @@ from __future__ import annotations
 import platform
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from .app_context import get_active_app_context
 from .chunker import ActivityChunker
@@ -21,6 +21,7 @@ from .screenshot import capture_screenshot
 from .storage.insforge_client import InsForgeClient
 from .storage.local_sqlite import LocalSQLiteRepository
 from .summarization import generate_final_pseudocode, summarize_activity_chunk
+from .workflows import build_workflow_artifacts
 
 
 @dataclass(slots=True)
@@ -163,6 +164,8 @@ class SessionRecorder:
             )
             if self.insforge_client and self.config.enable_cloud_sync:
                 self._upload_final_pseudocode(final)
+            self._finalize_workflow_artifacts(final, summaries)
+            self._purge_expired_raw_data(datetime.now(timezone.utc))
 
         session = self.repository.get_session(self.state.session_id)
         if session:
@@ -240,6 +243,7 @@ class SessionRecorder:
         if self.insforge_client and self.config.enable_cloud_sync:
             self._upload_chunk_summary(summary)
         self._chunker.reset_chunk_buffer(current)
+        self._purge_expired_raw_data(current)
 
     def _flush_pending_chunk(self) -> None:
         if not self._chunker:
@@ -252,12 +256,46 @@ class SessionRecorder:
         if self.insforge_client and self.config.enable_cloud_sync:
             self._upload_chunk_summary(summary)
         self._chunker.reset_chunk_buffer(current)
+        self._purge_expired_raw_data(current)
 
     def _save_chunk_summary(self, summary: ChunkSummary) -> ChunkSummary:
         return self.repository.save_chunk_summary(summary)
 
     def _save_final_pseudocode(self, final: FinalPseudocode) -> FinalPseudocode:
         return self.repository.save_final_pseudocode(final)
+
+    def _finalize_workflow_artifacts(
+        self,
+        final: FinalPseudocode,
+        summaries: list[ChunkSummary],
+    ) -> None:
+        if not self.config.enable_workflow_insights:
+            return
+        artifacts = build_workflow_artifacts(
+            final,
+            summaries,
+            enable_template_creation=self.config.enable_workflow_template_creation,
+            enable_agent_handoff_drafts=self.config.enable_agent_handoff_drafts,
+            handoff_threshold=self.config.agent_handoff_automation_score_threshold,
+        )
+        insight = self.repository.save_workflow_insight(artifacts.insight)
+        if self.insforge_client and self.config.enable_cloud_sync:
+            self._upload_workflow_insight(insight)
+
+        if artifacts.template is not None:
+            template = self.repository.save_workflow_template(artifacts.template)
+            if self.insforge_client and self.config.enable_cloud_sync:
+                self._upload_workflow_template(template)
+            artifacts.search_index.template_id = template.id
+
+        search_record = self.repository.save_workflow_search_index(artifacts.search_index)
+        if self.insforge_client and self.config.enable_cloud_sync:
+            self._upload_workflow_search_index_record(search_record)
+
+        if artifacts.handoff_draft is not None:
+            draft = self.repository.save_agent_handoff_draft(artifacts.handoff_draft)
+            if self.insforge_client and self.config.enable_cloud_sync:
+                self._upload_agent_handoff_draft(draft)
 
     def _upload_chunk_summary(self, summary: ChunkSummary) -> None:
         try:
@@ -291,6 +329,84 @@ class SessionRecorder:
         except Exception:
             return
         self.repository.mark_final_pseudocode_synced(final.id, created.get("id"))
+
+    def _upload_workflow_insight(self, insight) -> None:
+        try:
+            created = self.insforge_client.upload_workflow_insight(
+                {
+                    "id": insight.id,
+                    "session_id": insight.session_id,
+                    "summary": insight.summary,
+                    "main_apps": insight.main_apps,
+                    "detected_task_type": insight.detected_task_type,
+                    "tags": insight.tags,
+                    "automation_score": insight.automation_score,
+                    "automation_reason": insight.automation_reason,
+                    "recommended_next_action": insight.recommended_next_action,
+                }
+            )
+        except Exception:
+            return
+        self.repository.mark_workflow_insight_synced(insight.id, created.get("id"))
+
+    def _upload_workflow_template(self, template) -> None:
+        try:
+            created = self.insforge_client.upload_workflow_template(
+                {
+                    "id": template.id,
+                    "session_id": template.session_id,
+                    "title": template.title,
+                    "description": template.description,
+                    "category": template.category,
+                    "tags": template.tags,
+                    "pseudocode": template.pseudocode,
+                    "plain_text": template.plain_text,
+                    "created_from": template.created_from,
+                }
+            )
+        except Exception:
+            return
+        self.repository.mark_workflow_template_synced(template.id, created.get("id"))
+
+    def _upload_agent_handoff_draft(self, draft) -> None:
+        try:
+            created = self.insforge_client.upload_agent_handoff_draft(
+                {
+                    "id": draft.id,
+                    "session_id": draft.session_id,
+                    "template_id": draft.template_id,
+                    "status": draft.status,
+                    "proposed_action": draft.proposed_action,
+                    "action_plan": draft.action_plan,
+                    "requires_user_approval": draft.requires_user_approval,
+                    "approved_at": draft.approved_at.isoformat() if draft.approved_at else None,
+                    "executed_at": draft.executed_at.isoformat() if draft.executed_at else None,
+                }
+            )
+        except Exception:
+            return
+        self.repository.mark_agent_handoff_draft_synced(draft.id, created.get("id"))
+
+    def _upload_workflow_search_index_record(self, record) -> None:
+        try:
+            created = self.insforge_client.upload_search_index_record(
+                {
+                    "id": record.id,
+                    "session_id": record.session_id,
+                    "template_id": record.template_id,
+                    "searchable_text": record.searchable_text,
+                    "tags": record.tags,
+                }
+            )
+        except Exception:
+            return
+        self.repository.mark_workflow_search_index_record_synced(record.id, created.get("id"))
+
+    def _purge_expired_raw_data(self, current: datetime) -> None:
+        if self.state.session_id is None:
+            return
+        cutoff = current - timedelta(seconds=self.config.raw_data_ttl_seconds)
+        self.repository.purge_expired_raw_data(self.state.session_id, cutoff)
 
     def _normalize_key_name(self, key: object) -> str | None:
         key_str = str(key).replace("Key.", "").lower()
