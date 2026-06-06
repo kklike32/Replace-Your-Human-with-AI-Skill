@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import platform
 import time
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 
 from .app_context import get_active_app_context
 from .config import TrackerConfig
-from .events import Event, EventType
+from .events import Event, EventType, ScreenshotRecord, Session
 from .ocr import OCRProcessor
 from .privacy import (
     is_sensitive_ocr_text,
@@ -14,37 +16,66 @@ from .privacy import (
     should_capture_shortcut,
 )
 from .screenshot import capture_screenshot
-from .storage import SQLiteStorage
+from .storage.insforge_client import InsForgeClient
+from .storage.local_sqlite import LocalSQLiteRepository
 
 
 @dataclass(slots=True)
 class RecorderState:
     running: bool = False
     paused: bool = False
-    session_id: int | None = None
+    session_id: str | None = None
     pressed_modifiers: set[str] = field(default_factory=set)
 
 
 class SessionRecorder:
-    def __init__(self, config: TrackerConfig, storage: SQLiteStorage) -> None:
+    def __init__(
+        self,
+        config: TrackerConfig,
+        repository: LocalSQLiteRepository,
+        insforge_client: InsForgeClient | None = None,
+    ) -> None:
         self.config = config
-        self.storage = storage
+        self.repository = repository
+        self.insforge_client = insforge_client
         self.ocr = OCRProcessor(enabled=config.ocr_enabled)
         self.state = RecorderState()
         self._keyboard_listener = None
         self._mouse_listener = None
 
-    def run(self) -> int:
+    def run(self) -> str:
         self.config.ensure_directories()
-        self.state.session_id = self.storage.create_session(
-            local_only_mode=self.config.local_only_mode,
-            screenshot_interval_seconds=self.config.screenshot_interval_seconds,
-            ocr_enabled=self.config.ocr_enabled,
+        session = Session(
+            sync_enabled=self.config.enable_cloud_sync,
+            device_name=platform.node() or None,
+            os_name=platform.system(),
         )
+        session = self.repository.create_session(session)
+        if self.insforge_client and self.config.enable_cloud_sync:
+            try:
+                created = self.insforge_client.create_session(
+                    {
+                        "id": session.id,
+                        "user_id": session.user_id,
+                        "started_at": session.started_at.isoformat(),
+                        "ended_at": None,
+                        "session_name": session.session_name,
+                        "device_name": session.device_name,
+                        "os_name": session.os_name,
+                        "sync_enabled": session.sync_enabled,
+                    }
+                )
+                session.cloud_id = created.get("id", session.id)
+                session.synced = True
+                self.repository.update_session(session)
+            except Exception:
+                # Sync can recover later with `tracker sync`.
+                pass
+        self.state.session_id = session.id
         self.state.running = True
 
         app_name, window_title = get_active_app_context()
-        self.storage.add_event(
+        self.repository.save_event(
             Event(
                 session_id=self.state.session_id,
                 event_type=EventType.SESSION_START,
@@ -53,6 +84,7 @@ class SessionRecorder:
                 metadata={
                     "local_only_mode": self.config.local_only_mode,
                     "ocr_enabled": self.config.ocr_enabled,
+                    "enable_cloud_sync": self.config.enable_cloud_sync,
                 },
             )
         )
@@ -97,7 +129,7 @@ class SessionRecorder:
 
         if self.state.session_id is not None:
             app_name, window_title = get_active_app_context()
-            self.storage.add_event(
+            self.repository.save_event(
                 Event(
                     session_id=self.state.session_id,
                     event_type=EventType.SESSION_STOP,
@@ -106,13 +138,17 @@ class SessionRecorder:
                     metadata={"reason": "user_interrupt_or_stop"},
                 )
             )
-            self.storage.stop_session(self.state.session_id)
+            session = self.repository.get_session(self.state.session_id)
+            if session:
+                session.ended_at = session.ended_at or datetime.now(timezone.utc)
+                session.status = "stopped"
+                self.repository.update_session(session)
 
     def _record_snapshot(self) -> None:
         assert self.state.session_id is not None
 
         app_name, window_title = get_active_app_context()
-        self.storage.add_event(
+        self.repository.save_event(
             Event(
                 session_id=self.state.session_id,
                 event_type=EventType.ACTIVE_WINDOW,
@@ -126,19 +162,28 @@ class SessionRecorder:
             return
 
         image_path = capture_screenshot(self.config.screenshot_dir, self.state.session_id)
-        self.storage.add_event(
+        screenshot_event = self.repository.save_event(
             Event(
                 session_id=self.state.session_id,
                 event_type=EventType.SCREENSHOT,
                 app_name=app_name,
                 window_title=window_title,
-                metadata={"path": str(image_path)},
+                metadata={"path": str(image_path), "uploaded": False},
             )
         )
 
         text = self.ocr.extract_text(image_path)
+        self.repository.save_screenshot(
+            ScreenshotRecord(
+                session_id=self.state.session_id,
+                event_id=screenshot_event.id,
+                local_path=str(image_path),
+                ocr_text=redact_text(text, max_len=500) if text else None,
+            )
+        )
+
         if text and not is_sensitive_ocr_text(text):
-            self.storage.add_event(
+            self.repository.save_event(
                 Event(
                     session_id=self.state.session_id,
                     event_type=EventType.OCR_TEXT,
@@ -176,8 +221,10 @@ class SessionRecorder:
         if key_name == "p" and {"ctrl", "shift"}.issubset(self.state.pressed_modifiers):
             self.state.paused = not self.state.paused
             if self.state.session_id is not None:
-                new_status = "paused" if self.state.paused else "running"
-                self.storage.set_session_status(self.state.session_id, new_status)
+                session = self.repository.get_session(self.state.session_id)
+                if session:
+                    session.status = "paused" if self.state.paused else "running"
+                    self.repository.update_session(session)
             return
 
     def _on_key_release(self, key: object) -> None:
@@ -199,7 +246,7 @@ class SessionRecorder:
         shortcut_parts = sorted(self.state.pressed_modifiers) + [key_name or "unknown"]
         shortcut = "+".join(shortcut_parts)
 
-        self.storage.add_event(
+        self.repository.save_event(
             Event(
                 session_id=self.state.session_id,
                 event_type=EventType.KEYBOARD_SHORTCUT,
@@ -217,7 +264,7 @@ class SessionRecorder:
         if is_sensitive_window_title(window_title):
             return
 
-        self.storage.add_event(
+        self.repository.save_event(
             Event(
                 session_id=self.state.session_id,
                 event_type=EventType.MOUSE_CLICK,

@@ -1,79 +1,104 @@
 # computer-usage-tracker
 
-A local-first Python prototype that tracks desktop activity during a work session, converts recorded actions into readable pseudocode, and suggests useful next steps.
+`computer-usage-tracker` is a privacy-first Python desktop prototype that:
 
-## Important Privacy and Consent Notes
+- Tracks local computer usage during a work session
+- Stores structured events and screenshot metadata
+- Generates readable workflow pseudocode
+- Suggests useful next steps
 
-- This project is designed for personal use on your own machine.
-- You are responsible for getting consent if any other user's data is visible on your system.
-- By default, keyboard tracking records shortcuts only and does **not** log full typed text.
-- The tracker attempts to avoid sensitive capture by skipping obvious password contexts.
-- All data is stored locally in SQLite and local folders.
+The app is local-first by design and can sync to InsForge as the backend of record.
 
-## Features
+## Why InsForge
 
-- Session-based tracking (`tracker start`, `tracker stop`)
-- Event storage in local SQLite
-- Mouse click capture
-- Keyboard shortcut capture (not raw key logging)
-- Active app/window snapshots
-- Periodic screenshots
-- Optional OCR extraction from screenshots
-- Rule-based pseudocode generation
-- Rule-based workflow suggestions
-- Markdown export for session summaries
-- Placeholder `ActionAgent` interface for future user-approved automation
+InsForge is used for:
 
-## Architecture Overview
+- PostgreSQL database for sessions/events/summaries
+- Auth integration for future multi-user flows
+- S3-compatible object storage for screenshots
+- Future edge/serverless backend functions and AI gateway integration
 
-- `tracker.recorder`: session loop, keyboard/mouse listeners, screenshot loop, pause/resume
-- `tracker.storage`: SQLite schema and persistence
-- `tracker.events`: event models and event types
-- `tracker.app_context`: active app/window detection
-- `tracker.screenshot` + `tracker.ocr`: screenshot capture and OCR pipeline
-- `tracker.pseudocode`: deterministic pseudocode generation (`PseudocodeGenerator`)
-- `tracker.suggestions`: deterministic suggestion engine (`SuggestionEngine`)
-- `tracker.agent`: placeholder for future action-execution agent
+For hackathon:
+Use InsForge Cloud because it is faster to set up, easier to demo, and avoids local infrastructure issues.
+
+For long-term:
+Keep the code backend-agnostic through environment variables and the `InsForgeClient` abstraction. If privacy or cost becomes important, switch to the open-source self-hosted InsForge deployment without changing the app architecture.
+
+## Architecture
+
+- Local tracker runs on user machine
+- Local SQLite is always written first
+- InsForge sync is second (`tracker sync` or auto-sync when enabled)
+- Screenshot files are kept locally and uploaded only if explicitly enabled
+
+Core modules:
+
+- `tracker.recorder`: keyboard/mouse listeners, app/window tracking, screenshot loop, pause/resume
+- `tracker.storage.local_sqlite`: local fallback and primary write path
+- `tracker.storage.insforge_client`: InsForge API wrapper
+- `tracker.sync`: upload unsynced sessions/events/screenshots/summaries
+- `tracker.pseudocode`: deterministic rule-based pseudocode generator
+- `tracker.suggestions`: deterministic rule-based suggestion engine
+- `tracker.agent`: future explicit-consent action agent placeholder
+
+## Privacy Defaults
+
+- `ENABLE_CLOUD_SYNC=false`
+- `ENABLE_SCREENSHOT_UPLOAD=false`
+- Tracks keyboard shortcuts only, not full typed text
+- Tries to avoid sensitive windows/password-like contexts
+- Pause/resume tracking with `Ctrl+Shift+P`
+
+This tool is intended for personal use with user consent.
 
 ## Setup
 
 ### Requirements
 
 - Python 3.11+
-- Tesseract OCR installed on your machine for OCR support:
-  - macOS (Homebrew): `brew install tesseract`
+- Tesseract OCR installed locally
+  - macOS: `brew install tesseract`
 
 ### Install
 
 ```bash
 pip install -e .
-```
-
-For development tools:
-
-```bash
 pip install -e .[dev]
 ```
 
-## Usage
+### Environment
 
-Start a tracking session:
+Copy `.env.example` to `.env` and edit values as needed.
+
+```bash
+INSFORGE_BASE_URL=
+INSFORGE_PROJECT_ID=
+INSFORGE_API_KEY=
+INSFORGE_AUTH_TOKEN=
+INSFORGE_STORAGE_BUCKET=session-screenshots
+ENABLE_CLOUD_SYNC=false
+ENABLE_SCREENSHOT_UPLOAD=false
+LOCAL_DB_PATH=data/local_tracker.db
+```
+
+## CLI
+
+Initialize backend setup artifacts:
+
+```bash
+tracker init-backend
+```
+
+Start tracking session:
 
 ```bash
 tracker start
 ```
 
-Behavior:
-
-- Creates a new session in local SQLite.
-- Runs until interrupted with `Ctrl+C`.
-- Saves screenshots in `data/screenshots/`.
-- Saves OCR events (if enabled) and context events.
-
-Stop an active session by ID:
+Stop running session (best effort):
 
 ```bash
-tracker stop --session-id <id>
+tracker stop
 ```
 
 Summarize latest session:
@@ -82,54 +107,58 @@ Summarize latest session:
 tracker summarize
 ```
 
-Summarize a specific session:
+Sync unsynced data to InsForge:
 
 ```bash
-tracker summarize --session-id <id>
+tracker sync
 ```
 
-Export a summary to Markdown:
+Export markdown summary:
 
 ```bash
 tracker export --session-id <id> --format markdown
 ```
 
-## Privacy Controls
+## Data Model
 
-- Shortcut-only keyboard capture by default (no raw typing stream)
-- Sensitive-context filtering for password-like windows and OCR text
-- Pause/resume tracking while running using `Ctrl+Shift+P`
-- Local-only mode enabled by default
-- OCR toggle enabled by default and configurable
+InsForge schema targets these tables:
 
-## Configuration
+- `users`
+- `sessions`
+- `events`
+- `screenshots`
+- `summaries`
 
-Runtime defaults are in `src/tracker/config.py`:
+Supported event types:
 
-- Screenshot interval: 5 seconds
-- OCR enabled: true
-- Local-only mode: true
-- Database path: `data/tracker.sqlite3`
+- `session_start`
+- `session_stop`
+- `mouse_click`
+- `keyboard_shortcut`
+- `active_window`
+- `screenshot`
+- `ocr_text`
+- `pseudocode_generated`
+- `suggestion_generated`
+
+Screenshot object path format:
+
+`users/{user_id_or_anonymous}/sessions/{session_id}/{timestamp}.png`
+
+## Cloud vs Self-Hosted
+
+- Hackathon: use InsForge Cloud
+- Long-term: switch to self-hosted InsForge by updating environment variables; app architecture remains the same
 
 ## Tests
-
-Run tests:
 
 ```bash
 pytest
 ```
 
-Current tests cover:
-
-- Event creation
-- SQLite storage
-- Pseudocode generation
-- Suggestion generation
-
 ## Roadmap
 
-- LLM-backed pseudocode/suggestion adapters (OpenAI/Ollama/local)
-- Stronger app/window detection across OSes
-- Better redaction and privacy policies
-- Session replay and template extraction
-- User-confirmed action execution agent (future)
+- Improve platform-specific active window/process fidelity
+- Add dashboard and backend function examples
+- Add optional LLM adapters for pseudocode/suggestions
+- Implement explicit-consent action execution layer in `tracker.agent`

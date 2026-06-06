@@ -4,9 +4,11 @@ __pycache__/
 .venv/
 venv/
 .env
+.env.local
 .pytest_cache/
 .mypy_cache/
 .DS_Store
+*.egg-info/
 
 data/*.db
 data/*.sqlite
@@ -15,3 +17,18 @@ data/screenshots/*
 !data/screenshots/.gitkeep
 data/exports/*
 !data/exports/.gitkeep
+
+# InsForge & AI agent skills
+.insforge
+.agent
+.agents
+.augment
+.claude
+.cline
+.github/copilot*
+.kilocode
+.qoder
+.qwen
+.roo
+.trae
+.windsurf

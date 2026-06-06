@@ -19,17 +19,17 @@ class SuggestionEngine:
 
         if click_count >= 10:
             suggestions.append(
-                "This workflow looks repetitive. Consider automating it with a Python script."
+                "This workflow appears repetitive. Consider turning it into a Python script."
             )
 
         if any("chart" in text or "table" in text for text in ocr_texts):
             suggestions.append(
-                "You worked with tabular/chart data. Consider a reusable macro or pandas pipeline."
+                "The session involved spreadsheet operations. Consider generating a pandas workflow."
             )
 
         if shortcut_count >= 3:
             suggestions.append(
-                "You are using repeated shortcuts. A task script or launcher could reduce context switching."
+                "You used repeated shortcuts. A lightweight task script could reduce context switching."
             )
 
         if "No significant actions captured" in pseudocode:
@@ -37,6 +37,8 @@ class SuggestionEngine:
                 "Capture a longer session or lower screenshot interval to improve summary quality."
             )
         else:
-            suggestions.append("Save this session as a reusable workflow template.")
+            suggestions.append(
+                "The user created or edited visual output. Consider saving this as a reusable reporting template."
+            )
 
         return suggestions

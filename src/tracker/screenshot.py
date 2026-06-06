@@ -7,7 +7,7 @@ import mss
 from PIL import Image
 
 
-def capture_screenshot(output_dir: Path, session_id: int) -> Path:
+def capture_screenshot(output_dir: Path, session_id: str) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
     stamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S_%f")
     image_path = output_dir / f"session_{session_id}_{stamp}.png"

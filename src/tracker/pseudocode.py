@@ -18,7 +18,7 @@ class PseudocodeGenerator:
 
         for event in events:
             if event.event_type == EventType.SESSION_START and event.app_name:
-                steps.append(f"Opened {event.app_name}.")
+                steps.append(f"User opened {event.app_name}.")
                 continue
 
             if event.event_type == EventType.ACTIVE_WINDOW and event.window_title:
@@ -30,22 +30,22 @@ class PseudocodeGenerator:
             if event.event_type == EventType.MOUSE_CLICK:
                 button = str(event.metadata.get("button", "mouse")).replace("Button.", "")
                 if event.window_title:
-                    steps.append(f"Clicked {button} in {event.window_title}.")
+                    steps.append(f"User clicked {button} in {event.window_title}.")
                 else:
-                    steps.append(f"Clicked {button}.")
+                    steps.append(f"User clicked {button}.")
                 continue
 
             if event.event_type == EventType.KEYBOARD_SHORTCUT:
                 combo = event.metadata.get("shortcut")
                 if combo:
-                    steps.append(f"Used shortcut {combo}.")
+                    steps.append(f"User used shortcut {combo}.")
                 continue
 
             if event.event_type == EventType.OCR_TEXT:
                 text = str(event.metadata.get("text", "")).lower()
                 if "chart" in text:
-                    steps.append("Worked with chart-related content.")
+                    steps.append("User created or edited a chart.")
                 elif "table" in text:
-                    steps.append("Worked with tabular data.")
+                    steps.append("User worked with tabular data.")
 
         return steps
