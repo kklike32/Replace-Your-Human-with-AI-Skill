@@ -2,8 +2,12 @@ from __future__ import annotations
 
 import platform
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
+from typing import Any
+
+import requests
 
 from .app_context import get_active_app_context
 from .chunker import ActivityChunker
@@ -30,6 +34,8 @@ class RecorderState:
     paused: bool = False
     session_id: str | None = None
     pressed_modifiers: set[str] = field(default_factory=set)
+    screenshot_count: int = 0
+    event_count: int = 0
 
 
 class SessionRecorder:
@@ -39,6 +45,7 @@ class SessionRecorder:
         repository: LocalSQLiteRepository,
         llm_client: LLMClient,
         insforge_client: InsForgeClient | None = None,
+        event_sink: Callable[[dict[str, Any]], None] | None = None,
     ) -> None:
         self.config = config
         self.repository = repository
@@ -49,6 +56,7 @@ class SessionRecorder:
         self._keyboard_listener = None
         self._mouse_listener = None
         self._chunker: ActivityChunker | None = None
+        self._event_sink = event_sink
 
     def run(self) -> str:
         self.config.ensure_directories()
@@ -60,6 +68,11 @@ class SessionRecorder:
         session = self.repository.create_session(session)
         self.state.session_id = session.id
         self.state.running = True
+        self._emit(
+            "session_started",
+            session_id=session.id,
+            started_at=session.started_at.isoformat(),
+        )
         self._chunker = ActivityChunker(
             session_id=session.id,
             screenshot_interval_seconds=self.config.screenshot_interval_seconds,
@@ -70,7 +83,7 @@ class SessionRecorder:
             self._create_remote_session(session)
 
         app_name, window_title = get_active_app_context()
-        start_event = self.repository.save_event(
+        start_event = self._save_event(
             Event(
                 session_id=session.id,
                 event_type=EventType.SESSION_START,
@@ -99,6 +112,9 @@ class SessionRecorder:
                 time.sleep(0.05)
         except KeyboardInterrupt:
             self.state.running = False
+        except Exception as exc:
+            self._emit("error", message=str(exc), recoverable=False)
+            raise
         finally:
             self._shutdown()
 
@@ -144,7 +160,7 @@ class SessionRecorder:
             return
 
         app_name, window_title = get_active_app_context()
-        stop_event = self.repository.save_event(
+        stop_event = self._save_event(
             Event(
                 session_id=self.state.session_id,
                 event_type=EventType.SESSION_STOP,
@@ -159,12 +175,36 @@ class SessionRecorder:
 
         summaries = self.repository.get_chunk_summaries(self.state.session_id)
         if summaries:
+            self._emit("final_pseudocode_started", session_id=self.state.session_id)
             final = self._save_final_pseudocode(
                 generate_final_pseudocode(self.llm_client, summaries)
             )
             if self.insforge_client and self.config.enable_cloud_sync:
                 self._upload_final_pseudocode(final)
-            self._finalize_workflow_artifacts(final, summaries)
+            insight, template, handoff = self._finalize_workflow_artifacts(final, summaries)
+            self._emit(
+                "final_pseudocode_created",
+                session_id=final.session_id,
+                pseudocode=final.pseudocode,
+                plain_text=final.plain_text,
+                automation_score=getattr(insight, "automation_score", None),
+                recommended_next_action=getattr(insight, "recommended_next_action", None),
+            )
+            if template is not None:
+                self._emit(
+                    "workflow_template_created",
+                    session_id=template.session_id,
+                    title=template.title,
+                    category=template.category,
+                    tags=template.tags,
+                )
+            if handoff is not None:
+                self._emit(
+                    "agent_handoff_created",
+                    session_id=handoff.session_id,
+                    status=handoff.status,
+                    proposed_action=handoff.proposed_action,
+                )
             self._purge_expired_raw_data(datetime.now(timezone.utc))
 
         session = self.repository.get_session(self.state.session_id)
@@ -172,13 +212,18 @@ class SessionRecorder:
             session.ended_at = session.ended_at or datetime.now(timezone.utc)
             session.status = "stopped"
             self.repository.update_session(session)
+            self._emit(
+                "session_complete",
+                session_id=session.id,
+                ended_at=session.ended_at.isoformat() if session.ended_at else None,
+            )
 
     def _record_snapshot(self, current: datetime) -> None:
         assert self.state.session_id is not None
         assert self._chunker is not None
 
         app_name, window_title = get_active_app_context()
-        window_event = self.repository.save_event(
+        window_event = self._save_event(
             Event(
                 session_id=self.state.session_id,
                 event_type=EventType.ACTIVE_WINDOW,
@@ -195,7 +240,7 @@ class SessionRecorder:
             return
 
         image_path = capture_screenshot(self.config.screenshot_dir, self.state.session_id)
-        screenshot_event = self.repository.save_event(
+        screenshot_event = self._save_event(
             Event(
                 session_id=self.state.session_id,
                 event_type=EventType.SCREENSHOT,
@@ -205,7 +250,7 @@ class SessionRecorder:
                 timestamp=current,
             )
         )
-        screenshot_record = self.repository.save_screenshot(
+        screenshot_record = self._save_screenshot(
             ScreenshotRecord(
                 session_id=self.state.session_id,
                 event_id=screenshot_event.id,
@@ -222,7 +267,7 @@ class SessionRecorder:
             self.repository.save_screenshot(screenshot_record)
 
         if text and not is_sensitive_ocr_text(text):
-            ocr_event = self.repository.save_event(
+            ocr_event = self._save_event(
                 Event(
                     session_id=self.state.session_id,
                     event_type=EventType.OCR_TEXT,
@@ -233,13 +278,31 @@ class SessionRecorder:
                 )
             )
             self._chunker.add_event(ocr_event)
+        self._emit_capture_tick()
 
     def _process_due_chunk(self, current: datetime) -> None:
         assert self._chunker is not None
         chunk = self._chunker.build_chunk(current)
         if chunk is None:
             return
+        self._emit(
+            "chunk_started",
+            session_id=chunk.session_id,
+            chunk_index=chunk.chunk_index,
+            started_at=chunk.started_at,
+            ended_at=chunk.ended_at,
+        )
+        self._emit("gemini_started", chunk_index=chunk.chunk_index)
         summary = self._save_chunk_summary(summarize_activity_chunk(self.llm_client, chunk))
+        self._emit(
+            "chunk_summary_created",
+            chunk_index=summary.chunk_index,
+            summary=summary.summary,
+            observed_apps=summary.observed_apps,
+            confidence=summary.confidence,
+            started_at=summary.started_at,
+            ended_at=summary.ended_at,
+        )
         if self.insforge_client and self.config.enable_cloud_sync:
             self._upload_chunk_summary(summary)
         self._chunker.reset_chunk_buffer(current)
@@ -252,7 +315,24 @@ class SessionRecorder:
         chunk = self._chunker.build_chunk(current, force=True)
         if chunk is None:
             return
+        self._emit(
+            "chunk_started",
+            session_id=chunk.session_id,
+            chunk_index=chunk.chunk_index,
+            started_at=chunk.started_at,
+            ended_at=chunk.ended_at,
+        )
+        self._emit("gemini_started", chunk_index=chunk.chunk_index)
         summary = self._save_chunk_summary(summarize_activity_chunk(self.llm_client, chunk))
+        self._emit(
+            "chunk_summary_created",
+            chunk_index=summary.chunk_index,
+            summary=summary.summary,
+            observed_apps=summary.observed_apps,
+            confidence=summary.confidence,
+            started_at=summary.started_at,
+            ended_at=summary.ended_at,
+        )
         if self.insforge_client and self.config.enable_cloud_sync:
             self._upload_chunk_summary(summary)
         self._chunker.reset_chunk_buffer(current)
@@ -268,9 +348,9 @@ class SessionRecorder:
         self,
         final: FinalPseudocode,
         summaries: list[ChunkSummary],
-    ) -> None:
+    ) -> tuple[object, object | None, object | None]:
         if not self.config.enable_workflow_insights:
-            return
+            return None, None, None
         artifacts = build_workflow_artifacts(
             final,
             summaries,
@@ -278,6 +358,8 @@ class SessionRecorder:
             enable_agent_handoff_drafts=self.config.enable_agent_handoff_drafts,
             handoff_threshold=self.config.agent_handoff_automation_score_threshold,
         )
+        template = None
+        draft = None
         insight = self.repository.save_workflow_insight(artifacts.insight)
         if self.insforge_client and self.config.enable_cloud_sync:
             self._upload_workflow_insight(insight)
@@ -296,8 +378,14 @@ class SessionRecorder:
             draft = self.repository.save_agent_handoff_draft(artifacts.handoff_draft)
             if self.insforge_client and self.config.enable_cloud_sync:
                 self._upload_agent_handoff_draft(draft)
+        return insight, template, draft
 
     def _upload_chunk_summary(self, summary: ChunkSummary) -> None:
+        self._emit(
+            "insforge_sync_started",
+            record_type="chunk_summary",
+            chunk_index=summary.chunk_index,
+        )
         try:
             created = self.insforge_client.upload_chunk_summary(
                 {
@@ -311,11 +399,18 @@ class SessionRecorder:
                     "confidence": summary.confidence,
                 }
             )
-        except Exception:
+        except Exception as exc:
+            self._emit("error", message=str(exc), recoverable=True)
             return
         self.repository.mark_chunk_summary_synced(summary.id, created.get("id"))
+        self._emit(
+            "insforge_sync_complete",
+            record_type="chunk_summary",
+            chunk_index=summary.chunk_index,
+        )
 
     def _upload_final_pseudocode(self, final: FinalPseudocode) -> None:
+        self._emit("insforge_sync_started", record_type="final_pseudocode", session_id=final.session_id)
         try:
             created = self.insforge_client.upload_final_pseudocode(
                 {
@@ -326,11 +421,14 @@ class SessionRecorder:
                     "suggestions": final.suggestions,
                 }
             )
-        except Exception:
+        except Exception as exc:
+            self._emit("error", message=str(exc), recoverable=True)
             return
         self.repository.mark_final_pseudocode_synced(final.id, created.get("id"))
+        self._emit("insforge_sync_complete", record_type="final_pseudocode", session_id=final.session_id)
 
     def _upload_workflow_insight(self, insight) -> None:
+        self._emit("insforge_sync_started", record_type="workflow_insight", session_id=insight.session_id)
         try:
             created = self.insforge_client.upload_workflow_insight(
                 {
@@ -345,11 +443,29 @@ class SessionRecorder:
                     "recommended_next_action": insight.recommended_next_action,
                 }
             )
-        except Exception:
+        except requests.HTTPError as exc:
+            if exc.response is not None and exc.response.status_code == 404:
+                self.repository.mark_workflow_insight_synced(insight.id, None)
+                self._emit(
+                    "insforge_sync_complete",
+                    record_type="workflow_insight",
+                    session_id=insight.session_id,
+                )
+                return
+            self._emit("error", message=str(exc), recoverable=True)
+            return
+        except Exception as exc:
+            self._emit("error", message=str(exc), recoverable=True)
             return
         self.repository.mark_workflow_insight_synced(insight.id, created.get("id"))
+        self._emit("insforge_sync_complete", record_type="workflow_insight", session_id=insight.session_id)
 
     def _upload_workflow_template(self, template) -> None:
+        self._emit(
+            "insforge_sync_started",
+            record_type="workflow_template",
+            session_id=template.session_id,
+        )
         try:
             created = self.insforge_client.upload_workflow_template(
                 {
@@ -364,11 +480,29 @@ class SessionRecorder:
                     "created_from": template.created_from,
                 }
             )
-        except Exception:
+        except requests.HTTPError as exc:
+            if exc.response is not None and exc.response.status_code == 404:
+                self.repository.mark_workflow_template_synced(template.id, None)
+                self._emit(
+                    "insforge_sync_complete",
+                    record_type="workflow_template",
+                    session_id=template.session_id,
+                )
+                return
+            self._emit("error", message=str(exc), recoverable=True)
+            return
+        except Exception as exc:
+            self._emit("error", message=str(exc), recoverable=True)
             return
         self.repository.mark_workflow_template_synced(template.id, created.get("id"))
+        self._emit(
+            "insforge_sync_complete",
+            record_type="workflow_template",
+            session_id=template.session_id,
+        )
 
     def _upload_agent_handoff_draft(self, draft) -> None:
+        self._emit("insforge_sync_started", record_type="agent_handoff", session_id=draft.session_id)
         try:
             created = self.insforge_client.upload_agent_handoff_draft(
                 {
@@ -383,11 +517,18 @@ class SessionRecorder:
                     "executed_at": draft.executed_at.isoformat() if draft.executed_at else None,
                 }
             )
-        except Exception:
+        except Exception as exc:
+            self._emit("error", message=str(exc), recoverable=True)
             return
         self.repository.mark_agent_handoff_draft_synced(draft.id, created.get("id"))
+        self._emit("insforge_sync_complete", record_type="agent_handoff", session_id=draft.session_id)
 
     def _upload_workflow_search_index_record(self, record) -> None:
+        self._emit(
+            "insforge_sync_started",
+            record_type="workflow_search_index",
+            session_id=record.session_id,
+        )
         try:
             created = self.insforge_client.upload_search_index_record(
                 {
@@ -398,9 +539,26 @@ class SessionRecorder:
                     "tags": record.tags,
                 }
             )
-        except Exception:
+        except requests.HTTPError as exc:
+            if exc.response is not None and exc.response.status_code == 404:
+                self.repository.mark_workflow_search_index_record_synced(record.id, None)
+                self._emit(
+                    "insforge_sync_complete",
+                    record_type="workflow_search_index",
+                    session_id=record.session_id,
+                )
+                return
+            self._emit("error", message=str(exc), recoverable=True)
+            return
+        except Exception as exc:
+            self._emit("error", message=str(exc), recoverable=True)
             return
         self.repository.mark_workflow_search_index_record_synced(record.id, created.get("id"))
+        self._emit(
+            "insforge_sync_complete",
+            record_type="workflow_search_index",
+            session_id=record.session_id,
+        )
 
     def _purge_expired_raw_data(self, current: datetime) -> None:
         if self.state.session_id is None:
@@ -433,12 +591,7 @@ class SessionRecorder:
             return
 
         if key_name == "p" and {"ctrl", "shift"}.issubset(self.state.pressed_modifiers):
-            self.state.paused = not self.state.paused
-            if self.state.session_id is not None:
-                session = self.repository.get_session(self.state.session_id)
-                if session:
-                    session.status = "paused" if self.state.paused else "running"
-                    self.repository.update_session(session)
+            self.toggle_pause()
 
     def _on_key_release(self, key: object) -> None:
         key_name = self._normalize_key_name(key)
@@ -461,7 +614,7 @@ class SessionRecorder:
             return
 
         kind = "printable" if key_name and len(key_name) == 1 else "special"
-        event = self.repository.save_event(
+        event = self._save_event(
             Event(
                 session_id=self.state.session_id,
                 event_type=EventType.KEYBOARD_KEY,
@@ -480,7 +633,7 @@ class SessionRecorder:
 
         if should_capture_shortcut(self.state.pressed_modifiers, key_name):
             shortcut_parts = sorted(self.state.pressed_modifiers) + [key_name or "unknown"]
-            shortcut_event = self.repository.save_event(
+            shortcut_event = self._save_event(
                 Event(
                     session_id=self.state.session_id,
                     event_type=EventType.KEYBOARD_SHORTCUT,
@@ -498,7 +651,7 @@ class SessionRecorder:
         app_name, window_title = get_active_app_context()
         if is_sensitive_window_title(window_title):
             return
-        event = self.repository.save_event(
+        event = self._save_event(
             Event(
                 session_id=self.state.session_id,
                 event_type=EventType.KEYBOARD_KEY,
@@ -523,7 +676,7 @@ class SessionRecorder:
         if is_sensitive_window_title(window_title):
             return
 
-        event = self.repository.save_event(
+        event = self._save_event(
             Event(
                 session_id=self.state.session_id,
                 event_type=EventType.MOUSE_CLICK,
@@ -534,3 +687,48 @@ class SessionRecorder:
         )
         if self._chunker:
             self._chunker.add_event(event)
+
+    def request_stop(self) -> None:
+        self.state.running = False
+
+    def pause(self) -> None:
+        self._set_paused(True)
+
+    def resume(self) -> None:
+        self._set_paused(False)
+
+    def toggle_pause(self) -> None:
+        self._set_paused(not self.state.paused)
+
+    def _set_paused(self, paused: bool) -> None:
+        if self.state.paused == paused:
+            return
+        self.state.paused = paused
+        if self.state.session_id is not None:
+            session = self.repository.get_session(self.state.session_id)
+            if session:
+                session.status = "paused" if paused else "running"
+                self.repository.update_session(session)
+        self._emit("session_paused" if paused else "session_resumed", session_id=self.state.session_id)
+
+    def _save_event(self, event: Event) -> Event:
+        saved = self.repository.save_event(event)
+        self.state.event_count += 1
+        return saved
+
+    def _save_screenshot(self, record: ScreenshotRecord) -> ScreenshotRecord:
+        saved = self.repository.save_screenshot(record)
+        self.state.screenshot_count += 1
+        return saved
+
+    def _emit_capture_tick(self) -> None:
+        self._emit(
+            "capture_tick",
+            screenshot_count=self.state.screenshot_count,
+            event_count=self.state.event_count,
+        )
+
+    def _emit(self, event_type: str, **payload: Any) -> None:
+        if self._event_sink is None:
+            return
+        self._event_sink({"type": event_type, **payload})

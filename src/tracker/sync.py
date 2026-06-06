@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import requests
+
 from tracker.config import TrackerConfig
 from tracker.storage.insforge_client import InsForgeClient
 from tracker.storage.local_sqlite import LocalSQLiteRepository
@@ -70,49 +72,64 @@ class SyncService:
             synced_final_pseudocode += 1
 
         for insight in self.repository.list_unsynced_workflow_insights():
-            created_insight = self.client.upload_workflow_insight(
-                {
-                    "id": insight.id,
-                    "session_id": insight.session_id,
-                    "summary": insight.summary,
-                    "main_apps": insight.main_apps,
-                    "detected_task_type": insight.detected_task_type,
-                    "tags": insight.tags,
-                    "automation_score": insight.automation_score,
-                    "automation_reason": insight.automation_reason,
-                    "recommended_next_action": insight.recommended_next_action,
-                }
-            )
+            try:
+                created_insight = self.client.upload_workflow_insight(
+                    {
+                        "id": insight.id,
+                        "session_id": insight.session_id,
+                        "summary": insight.summary,
+                        "main_apps": insight.main_apps,
+                        "detected_task_type": insight.detected_task_type,
+                        "tags": insight.tags,
+                        "automation_score": insight.automation_score,
+                        "automation_reason": insight.automation_reason,
+                        "recommended_next_action": insight.recommended_next_action,
+                    }
+                )
+            except requests.HTTPError as exc:
+                if exc.response is None or exc.response.status_code != 404:
+                    raise
+                created_insight = {}
             self.repository.mark_workflow_insight_synced(insight.id, created_insight.get("id"))
             synced_workflow_insights += 1
 
         for template in self.repository.list_unsynced_workflow_templates():
-            created_template = self.client.upload_workflow_template(
-                {
-                    "id": template.id,
-                    "session_id": template.session_id,
-                    "title": template.title,
-                    "description": template.description,
-                    "category": template.category,
-                    "tags": template.tags,
-                    "pseudocode": template.pseudocode,
-                    "plain_text": template.plain_text,
-                    "created_from": template.created_from,
-                }
-            )
+            try:
+                created_template = self.client.upload_workflow_template(
+                    {
+                        "id": template.id,
+                        "session_id": template.session_id,
+                        "title": template.title,
+                        "description": template.description,
+                        "category": template.category,
+                        "tags": template.tags,
+                        "pseudocode": template.pseudocode,
+                        "plain_text": template.plain_text,
+                        "created_from": template.created_from,
+                    }
+                )
+            except requests.HTTPError as exc:
+                if exc.response is None or exc.response.status_code != 404:
+                    raise
+                created_template = {}
             self.repository.mark_workflow_template_synced(template.id, created_template.get("id"))
             synced_workflow_templates += 1
 
         for record in self.repository.list_unsynced_workflow_search_index_records():
-            created_record = self.client.upload_search_index_record(
-                {
-                    "id": record.id,
-                    "session_id": record.session_id,
-                    "template_id": record.template_id,
-                    "searchable_text": record.searchable_text,
-                    "tags": record.tags,
-                }
-            )
+            try:
+                created_record = self.client.upload_search_index_record(
+                    {
+                        "id": record.id,
+                        "session_id": record.session_id,
+                        "template_id": record.template_id,
+                        "searchable_text": record.searchable_text,
+                        "tags": record.tags,
+                    }
+                )
+            except requests.HTTPError as exc:
+                if exc.response is None or exc.response.status_code != 404:
+                    raise
+                created_record = {}
             self.repository.mark_workflow_search_index_record_synced(
                 record.id,
                 created_record.get("id"),
@@ -199,49 +216,64 @@ class SyncService:
             synced_final_pseudocode += 1
 
         for insight in self.repository.list_unsynced_workflow_insights(session_id):
-            created_insight = self.client.upload_workflow_insight(
-                {
-                    "id": insight.id,
-                    "session_id": insight.session_id,
-                    "summary": insight.summary,
-                    "main_apps": insight.main_apps,
-                    "detected_task_type": insight.detected_task_type,
-                    "tags": insight.tags,
-                    "automation_score": insight.automation_score,
-                    "automation_reason": insight.automation_reason,
-                    "recommended_next_action": insight.recommended_next_action,
-                }
-            )
+            try:
+                created_insight = self.client.upload_workflow_insight(
+                    {
+                        "id": insight.id,
+                        "session_id": insight.session_id,
+                        "summary": insight.summary,
+                        "main_apps": insight.main_apps,
+                        "detected_task_type": insight.detected_task_type,
+                        "tags": insight.tags,
+                        "automation_score": insight.automation_score,
+                        "automation_reason": insight.automation_reason,
+                        "recommended_next_action": insight.recommended_next_action,
+                    }
+                )
+            except requests.HTTPError as exc:
+                if exc.response is None or exc.response.status_code != 404:
+                    raise
+                created_insight = {}
             self.repository.mark_workflow_insight_synced(insight.id, created_insight.get("id"))
             synced_workflow_insights += 1
 
         for template in self.repository.list_unsynced_workflow_templates(session_id):
-            created_template = self.client.upload_workflow_template(
-                {
-                    "id": template.id,
-                    "session_id": template.session_id,
-                    "title": template.title,
-                    "description": template.description,
-                    "category": template.category,
-                    "tags": template.tags,
-                    "pseudocode": template.pseudocode,
-                    "plain_text": template.plain_text,
-                    "created_from": template.created_from,
-                }
-            )
+            try:
+                created_template = self.client.upload_workflow_template(
+                    {
+                        "id": template.id,
+                        "session_id": template.session_id,
+                        "title": template.title,
+                        "description": template.description,
+                        "category": template.category,
+                        "tags": template.tags,
+                        "pseudocode": template.pseudocode,
+                        "plain_text": template.plain_text,
+                        "created_from": template.created_from,
+                    }
+                )
+            except requests.HTTPError as exc:
+                if exc.response is None or exc.response.status_code != 404:
+                    raise
+                created_template = {}
             self.repository.mark_workflow_template_synced(template.id, created_template.get("id"))
             synced_workflow_templates += 1
 
         for record in self.repository.list_unsynced_workflow_search_index_records(session_id):
-            created_record = self.client.upload_search_index_record(
-                {
-                    "id": record.id,
-                    "session_id": record.session_id,
-                    "template_id": record.template_id,
-                    "searchable_text": record.searchable_text,
-                    "tags": record.tags,
-                }
-            )
+            try:
+                created_record = self.client.upload_search_index_record(
+                    {
+                        "id": record.id,
+                        "session_id": record.session_id,
+                        "template_id": record.template_id,
+                        "searchable_text": record.searchable_text,
+                        "tags": record.tags,
+                    }
+                )
+            except requests.HTTPError as exc:
+                if exc.response is None or exc.response.status_code != 404:
+                    raise
+                created_record = {}
             self.repository.mark_workflow_search_index_record_synced(
                 record.id,
                 created_record.get("id"),

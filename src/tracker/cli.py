@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import signal
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Optional
@@ -10,6 +11,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from .config import TrackerConfig
+from .jsonl import build_jsonl_sink
 from .llm import build_llm_client
 from .recorder import SessionRecorder
 from .storage.insforge_client import InsForgeClient
@@ -281,6 +283,11 @@ def start(
         None,
         help="LLM provider override, for example `vertex_gemini` or `mock`.",
     ),
+    jsonl: bool = typer.Option(
+        False,
+        "--jsonl",
+        help="Emit machine-readable JSONL progress events to stdout.",
+    ),
 ) -> None:
     """Start a new tracking session and record until Ctrl+C."""
     cloud_sync_override: Optional[bool] = None
@@ -306,14 +313,44 @@ def start(
         repository,
         llm_client=llm_client,
         insforge_client=client,
+        event_sink=build_jsonl_sink() if jsonl else None,
     )
 
-    console.print("[bold green]Tracking started.[/bold green] Press Ctrl+C to stop.")
-    session_id = recorder.run()
-    console.print(f"[bold]Session stopped:[/bold] {session_id}")
+    previous_sigint = signal.getsignal(signal.SIGINT)
+    previous_sigusr1 = signal.getsignal(signal.SIGUSR1) if hasattr(signal, "SIGUSR1") else None
+    previous_sigusr2 = signal.getsignal(signal.SIGUSR2) if hasattr(signal, "SIGUSR2") else None
+
+    def handle_stop(_signum: int, _frame: object) -> None:
+        recorder.request_stop()
+
+    def handle_pause(_signum: int, _frame: object) -> None:
+        recorder.pause()
+
+    def handle_resume(_signum: int, _frame: object) -> None:
+        recorder.resume()
+
+    signal.signal(signal.SIGINT, handle_stop)
+    if hasattr(signal, "SIGUSR1"):
+        signal.signal(signal.SIGUSR1, handle_pause)
+    if hasattr(signal, "SIGUSR2"):
+        signal.signal(signal.SIGUSR2, handle_resume)
+
+    if not jsonl:
+        console.print("[bold green]Tracking started.[/bold green] Press Ctrl+C to stop.")
+    try:
+        session_id = recorder.run()
+    finally:
+        signal.signal(signal.SIGINT, previous_sigint)
+        if previous_sigusr1 is not None and hasattr(signal, "SIGUSR1"):
+            signal.signal(signal.SIGUSR1, previous_sigusr1)
+        if previous_sigusr2 is not None and hasattr(signal, "SIGUSR2"):
+            signal.signal(signal.SIGUSR2, previous_sigusr2)
+
+    if not jsonl:
+        console.print(f"[bold]Session stopped:[/bold] {session_id}")
 
     final = repository.get_final_pseudocode(session_id)
-    if final:
+    if final and not jsonl:
         console.print(Panel.fit(final.plain_text, title=f"Session {session_id} Final Pseudocode"))
 
 

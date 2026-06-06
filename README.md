@@ -74,6 +74,27 @@ python -m pip install -e .[vertex]
 
 Install the `vertex` extra only when using `tracker start --llm-provider vertex_gemini`.
 
+### Desktop App
+
+Run the Tauri desktop app from the terminal with these steps:
+
+```bash
+cd desktop
+npm install
+unset NODE_OPTIONS
+source "$HOME/.cargo/env"
+npm run tauri dev
+```
+
+If you only want the frontend during development, use:
+
+```bash
+cd desktop
+npm run dev
+```
+
+Stop the desktop app with `Ctrl+C` in the terminal.
+
 ### Environment
 
 Copy `.env.example` to `.env`.
@@ -151,6 +172,24 @@ Export final pseudocode:
 ```bash
 tracker export --session-id <session_id>
 ```
+
+### Terminal Workflow Summary
+
+If you want the full terminal-driven flow without the desktop UI, use:
+
+```bash
+python -m pip install -e .[dev]
+python -m pip install -e .[vertex]
+cp .env.example .env
+tracker init-backend
+tracker start --llm-provider mock
+tracker start --cloud-sync --llm-provider vertex_gemini
+tracker summarize-final --session-id <session_id>
+tracker sync
+tracker export --session-id <session_id>
+```
+
+For the desktop UI flow, use the desktop commands above and then run the recorder from the app.
 
 ## Remote Schema
 
