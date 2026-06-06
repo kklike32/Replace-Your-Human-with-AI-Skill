@@ -4,6 +4,19 @@ import platform
 import subprocess
 
 
+def _normalize_text(value: object) -> str | None:
+    candidate = value
+    if callable(candidate):
+        try:
+            candidate = candidate()
+        except TypeError:
+            return None
+    if candidate is None:
+        return None
+    text = str(candidate).strip()
+    return text or None
+
+
 def _macos_frontmost_app_and_window() -> tuple[str | None, str | None]:
     script = """
     tell application "System Events"
@@ -28,7 +41,7 @@ def _macos_frontmost_app_and_window() -> tuple[str | None, str | None]:
         raw = result.stdout.strip()
         if "||" in raw:
             app_name, window_title = raw.split("||", maxsplit=1)
-            return app_name or None, window_title or None
+            return _normalize_text(app_name), _normalize_text(window_title)
     except Exception:
         return None, None
     return None, None
@@ -41,7 +54,7 @@ def _pygetwindow_fallback() -> tuple[str | None, str | None]:
         active = gw.getActiveWindow()
         if not active:
             return None, None
-        return None, getattr(active, "title", None)
+        return None, _normalize_text(getattr(active, "title", None))
     except Exception:
         return None, None
 

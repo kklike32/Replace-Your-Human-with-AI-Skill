@@ -13,10 +13,10 @@ SENSITIVE_KEYWORDS = (
 )
 
 
-def is_sensitive_window_title(window_title: str | None) -> bool:
+def is_sensitive_window_title(window_title: object | None) -> bool:
     if not window_title:
         return False
-    lower = window_title.lower()
+    lower = str(window_title).lower()
     return any(keyword in lower for keyword in SENSITIVE_KEYWORDS)
 
 
@@ -35,10 +35,10 @@ def should_capture_shortcut(modifiers: set[str], key_name: str | None) -> bool:
     return bool(modifiers)
 
 
-def is_sensitive_ocr_text(text: str | None) -> bool:
+def is_sensitive_ocr_text(text: object | None) -> bool:
     if not text:
         return False
-    lower = text.lower()
+    lower = str(text).lower()
     return any(keyword in lower for keyword in SENSITIVE_KEYWORDS)
 
 
