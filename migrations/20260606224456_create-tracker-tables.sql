@@ -1,14 +1,3 @@
-create table if not exists sessions (
-  id uuid primary key,
-  user_id uuid,
-  started_at timestamptz not null,
-  ended_at timestamptz,
-  session_name text,
-  device_name text,
-  os_name text,
-  created_at timestamptz default now()
-);
-
 create table if not exists chunk_summaries (
   id uuid primary key,
   session_id uuid references sessions(id),

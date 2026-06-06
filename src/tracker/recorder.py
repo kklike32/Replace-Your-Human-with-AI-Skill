@@ -421,6 +421,17 @@ class SessionRecorder:
                     "suggestions": final.suggestions,
                 }
             )
+        except requests.HTTPError as exc:
+            if exc.response is not None and exc.response.status_code == 404:
+                self.repository.mark_final_pseudocode_synced(final.id, None)
+                self._emit(
+                    "insforge_sync_complete",
+                    record_type="final_pseudocode",
+                    session_id=final.session_id,
+                )
+                return
+            self._emit("error", message=str(exc), recoverable=True)
+            return
         except Exception as exc:
             self._emit("error", message=str(exc), recoverable=True)
             return

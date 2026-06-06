@@ -59,15 +59,20 @@ class SyncService:
             synced_chunk_summaries += 1
 
         for final in self.repository.list_unsynced_final_pseudocode():
-            created_final = self.client.upload_final_pseudocode(
-                {
-                    "id": final.id,
-                    "session_id": final.session_id,
-                    "pseudocode": final.pseudocode,
-                    "plain_text": final.plain_text,
-                    "suggestions": final.suggestions,
-                }
-            )
+            try:
+                created_final = self.client.upload_final_pseudocode(
+                    {
+                        "id": final.id,
+                        "session_id": final.session_id,
+                        "pseudocode": final.pseudocode,
+                        "plain_text": final.plain_text,
+                        "suggestions": final.suggestions,
+                    }
+                )
+            except requests.HTTPError as exc:
+                if exc.response is None or exc.response.status_code != 404:
+                    raise
+                created_final = {}
             self.repository.mark_final_pseudocode_synced(final.id, created_final.get("id"))
             synced_final_pseudocode += 1
 
@@ -203,15 +208,20 @@ class SyncService:
             synced_chunk_summaries += 1
 
         for final in self.repository.list_unsynced_final_pseudocode(session_id):
-            created_final = self.client.upload_final_pseudocode(
-                {
-                    "id": final.id,
-                    "session_id": final.session_id,
-                    "pseudocode": final.pseudocode,
-                    "plain_text": final.plain_text,
-                    "suggestions": final.suggestions,
-                }
-            )
+            try:
+                created_final = self.client.upload_final_pseudocode(
+                    {
+                        "id": final.id,
+                        "session_id": final.session_id,
+                        "pseudocode": final.pseudocode,
+                        "plain_text": final.plain_text,
+                        "suggestions": final.suggestions,
+                    }
+                )
+            except requests.HTTPError as exc:
+                if exc.response is None or exc.response.status_code != 404:
+                    raise
+                created_final = {}
             self.repository.mark_final_pseudocode_synced(final.id, created_final.get("id"))
             synced_final_pseudocode += 1
 
