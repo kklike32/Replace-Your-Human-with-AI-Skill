@@ -1,4 +1,4 @@
-# computer-usage-tracker
+# Replace Your Human with AI Skill
 
 `computer-usage-tracker` is a local-first Python desktop prototype that captures computer activity, summarizes short activity windows with an LLM, and produces a final pseudocode workflow for the full session.
 
