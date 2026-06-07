@@ -77,6 +77,8 @@ def _get_session_id(repository: LocalSQLiteRepository, session_id: Optional[str]
 def _maybe_client(config: TrackerConfig) -> InsForgeClient | None:
     if not (config.enable_cloud_sync and config.has_insforge_credentials()):
         return None
+    if config.insforge_auth_enabled and not config.insforge_auth_token:
+        config.insforge_auth_enabled = False
     return InsForgeClient.from_config(config)
 
 
