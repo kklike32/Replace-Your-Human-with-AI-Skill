@@ -1,86 +1,128 @@
-# AIPent
+# Replace Your Human with AI Skill
 
-**AIPent is a native macOS menubar app for turning real desktop work into reusable workflow knowledge.**
+**Do the work once. Turn it into a reusable AI Skill.**
 
-It lives in the menu bar, starts recording in one click, keeps raw activity local, and produces a clean workflow preview you can review before syncing approved summaries to [InsForge](https://insforge.dev).
+*1st Place winner, Agentic Dev Tools Hackathon, San Francisco.*
 
-![Platform](https://img.shields.io/badge/platform-macOS-black)
-![Backend](https://img.shields.io/badge/backend-InsForge-0f766e)
-![Privacy](https://img.shields.io/badge/mode-local--first-1d4ed8)
+![Hackathon Winner](https://img.shields.io/badge/1st%20Place-Agentic%20Dev%20Tools%20Hackathon-black)
+![Platform](https://img.shields.io/badge/platform-macOS-111827)
+![Privacy](https://img.shields.io/badge/privacy-local--first-0f766e)
+![Backend](https://img.shields.io/badge/backend-InsForge-1d4ed8)
 
-## Why AIPent Feels Different
+Turn any desktop workflow into reusable AI Skill memory.
 
-Most activity trackers behave like developer tools. AIPent is designed more like a product:
+This repository contains the macOS app, local tracker, and InsForge sync layer.
 
-- **Native macOS menubar experience.** Start and stop capture without living in a terminal.
-- **Review before sync.** BuddyBar shows a generated steps preview before anything is sent to the cloud.
-- **Local-first by default.** Screenshots, OCR text, keyboard events, and mouse activity stay on your machine.
-- **Structured output, not raw surveillance.** The end result is workflow summaries, pseudocode, reusable templates, and automation hints.
-- **Built for real knowledge capture.** The goal is not analytics dashboards. The goal is to preserve how work actually gets done.
+## The Problem
 
-## The Main Product: BuddyBar
+Companies lose operational knowledge every day.
 
-`BuddyBar` is the primary experience in this repo: a lightweight native macOS menubar app located in [`macos/BuddyBar`](/Users/keenan/Documents/AIPent/macos/BuddyBar).
+People click through dashboards, clean spreadsheets, answer tickets, move data between tools, and generate reports. That work is valuable, repetitive, and often automation-ready, but the process usually disappears the moment the task is done.
 
-From the menu bar, BuddyBar lets you:
+Teams then pay for the same knowledge again through SOP writing, retraining, shadowing, and repeated manual execution.
 
-- start a capture session
-- stop and save the session
-- see live session state and the latest log line
-- preview generated workflow steps after capture ends
-- sync the approved session summary to InsForge
-- open the local data folder and exports folder
-- reveal the project root quickly
+## The Product
 
-The current implementation uses the Python tracking engine underneath, but the day-to-day experience is intentionally macOS-first.
+**Replace Your Human with AI Skill** is a native macOS workflow-capture product that turns real desktop work into reusable AI-ready skills.
 
-## How It Works
+It records a workflow locally, summarizes what happened, generates structured steps and pseudocode, scores automation readiness, and prepares a clean handoff record for future agent execution.
 
-1. You start a session from BuddyBar.
-2. The local tracker records screenshots, app/window context, and event metadata on-device.
-3. The recorder groups activity into short chunks and generates workflow summaries.
-4. When the session stops, AIPent creates a final pseudocode-style workflow preview.
-5. You review the result in BuddyBar.
-6. If you want cloud memory and search, you sync the approved privacy-safe summary to InsForge.
+## Why It Wins
 
-## Privacy Model
+- **Native macOS menubar experience.** Fast to launch, easy to keep running.
+- **One-click capture.** Start the workflow and work normally.
+- **Local-first privacy.** Sensitive raw activity stays on-device.
+- **Review before sync.** Nothing approved for cloud memory unless the user chooses it.
+- **Structured workflow knowledge.** Output is useful workflow logic, not raw surveillance footage.
+- **InsForge-backed memory.** Approved workflows can be stored, searched, and shared through [InsForge](https://insforge.dev).
+- **Built for agent handoff.** The end state is not a recording. It is a reusable AI Skill.
 
-What stays local:
+## Product Flow
+
+```text
+Human workflow
+      ↓
+BuddyBar local capture
+      ↓
+Screenshots + OCR + app context + events
+      ↓
+Chunk summaries
+      ↓
+Final workflow pseudocode
+      ↓
+Review preview
+      ↓
+Approved AI Skill
+      ↓
+InsForge workflow memory
+```
+
+1. Start recording from BuddyBar.
+2. Perform the workflow normally.
+3. Activity is captured locally.
+4. The system generates chunks and summaries.
+5. Final pseudocode and workflow steps are produced.
+6. The user reviews the preview.
+7. The approved summary can sync to InsForge.
+8. The workflow becomes a reusable AI Skill.
+
+## Demo Use Case
+
+Imagine an operations worker building the same weekly report every Friday.
+
+They open internal dashboards, export data, clean a spreadsheet, cross-check values, and paste results into a final report. Replace Your Human with AI Skill captures the workflow locally, extracts the structure, and outputs a reusable skill with:
+
+- workflow steps
+- pseudocode
+- automation hints
+- handoff-ready records
+
+That makes the value obvious for SOP generation, onboarding, operations documentation, and future AI agent automation.
+
+## Privacy, Clearly
+
+Local only:
 
 - screenshots
-- raw OCR text
-- keyboard and mouse activity
-- local event logs
-- the SQLite capture database
+- OCR text
+- keyboard and mouse events
+- raw logs
+- SQLite DB
 
-What can be synced to InsForge:
+Syncable only after review:
 
 - session metadata
 - chunk summaries
 - final pseudocode
 - workflow insights
-- reusable workflow templates
-- workflow search records
-- draft agent handoff records
+- reusable templates
+- agent handoff records
 
-This is the core product idea: capture sensitive work locally, then sync only the useful structured workflow knowledge.
+Sync is explicit. It is never automatic.
+
+## BuddyBar
+
+`BuddyBar` is the main product surface and lives in `macos/BuddyBar`.
+
+It is a native macOS menubar app that lets the user:
+
+- start capture
+- stop and save a session
+- review generated workflow steps
+- sync an approved result to InsForge
+- open local data and exports
+
+The capture engine runs through the local Python tracker underneath, but the user experience is designed around the Mac menu bar.
 
 ## InsForge
 
-[InsForge](https://insforge.dev) is the backend used for privacy-safe workflow memory, search, and sharing.
+[InsForge](https://insforge.dev) is the backend for approved workflow memory, search, and sharing.
 
-When connected, AIPent can use InsForge to:
-
-- keep approved workflow summaries off-device
-- store reusable workflow templates
-- search previous workflows
-- prepare handoff-ready structured outputs for later automation
-
-For BuddyBar, sync is explicit. The app records locally first, then offers a deliberate "sync preview" action after the workflow has been generated.
+Only reviewed, structured workflow outputs are eligible to sync. That keeps raw desktop activity local while still making high-value workflow knowledge reusable across sessions and teams.
 
 ## Quick Start
 
-### 1. Set up the Python runtime
+### 1. Create the environment
 
 ```bash
 python3.13 -m venv .venv
@@ -88,55 +130,46 @@ source .venv/bin/activate
 python -m pip install -e '.[dev]'
 ```
 
-If you want Gemini / Vertex-powered summarization, also install:
+Optional Vertex support:
 
 ```bash
 python -m pip install -e '.[vertex]'
 ```
 
-### 2. Install local dependencies
+### 2. Install Tesseract
 
 ```bash
 brew install tesseract
 ```
 
-### 3. Create your environment file
+### 3. Create `.env`
 
 ```bash
 cp .env.example .env
 ```
 
-BuddyBar expects the repo root to contain:
-
-- `.venv/bin/python`
-- `.env`
-- `src/tracker`
-
-### 4. Launch the native macOS app
+### 4. Launch BuddyBar
 
 ```bash
 cd macos/BuddyBar
 swift run
 ```
 
-On first launch, macOS will require **Screen Recording** and **Accessibility** permissions.
+On first launch, macOS will ask for **Screen Recording** and **Accessibility** permissions.
 
-## Using BuddyBar
+## Usage
 
-### Local-only workflow
-
-This is the default and recommended way to get started:
+### Local-only flow
 
 1. Launch BuddyBar.
-2. Click **Start** in the menu bar panel.
-3. Do the task you want to capture.
+2. Click **Start**.
+3. Perform the workflow normally.
 4. Click **Stop**.
-5. Review the generated steps preview in BuddyBar.
-6. Open the exports or data folder if you want to inspect local artifacts.
+5. Review the generated workflow preview.
 
-### Syncing a reviewed workflow to InsForge
+### InsForge sync flow
 
-Add these values to `.env`:
+Add the relevant InsForge values to `.env`:
 
 ```bash
 INSFORGE_BASE_URL=
@@ -146,31 +179,25 @@ INSFORGE_AUTH_TOKEN=
 INSFORGE_CURRENT_USER_ID=
 ```
 
-Then, after a session is complete, use the **Sync Preview to InsForge** button in BuddyBar.
+Then complete a session and use **Sync Preview to InsForge** from BuddyBar.
 
-If you want to validate the saved auth token from the command line, you can also use:
+## CLI
 
-```bash
-python -m tracker.cli auth status
-```
+BuddyBar is the main product experience. The CLI is available as the underlying control surface when you want direct access.
 
-## Command Line Usage
-
-The menu bar app is the best product surface, but the tracker engine is also available as a CLI.
-
-Start a session:
+Start capture:
 
 ```bash
 python -m tracker.cli start
 ```
 
-Start a session with explicit cloud sync enabled:
+Start with explicit cloud sync enabled:
 
 ```bash
 python -m tracker.cli start --cloud-sync --visibility private
 ```
 
-Generate a final workflow summary:
+Generate the final summary:
 
 ```bash
 python -m tracker.cli summarize
@@ -188,38 +215,16 @@ Sync unsynced records:
 python -m tracker.cli sync
 ```
 
-## Desktop Dashboard
-
-There is also a Tauri-based desktop dashboard in [`desktop`](/Users/keenan/Documents/AIPent/desktop). It provides a larger control panel for recording state, pipeline progress, chunk summaries, privacy settings, and final workflow output.
-
-Run it with:
-
-```bash
-cd desktop
-npm install
-source "$HOME/.cargo/env"
-unset NODE_OPTIONS
-npm run tauri dev
-```
-
-The dashboard is useful during development, but the repo’s most product-like user experience today is the native BuddyBar menubar app.
-
 ## Project Layout
 
-- [`macos/BuddyBar`](/Users/keenan/Documents/AIPent/macos/BuddyBar) - native macOS menubar app
-- [`desktop`](/Users/keenan/Documents/AIPent/desktop) - Tauri desktop dashboard
-- [`src/tracker/cli.py`](/Users/keenan/Documents/AIPent/src/tracker/cli.py) - CLI entrypoint
-- [`src/tracker/recorder.py`](/Users/keenan/Documents/AIPent/src/tracker/recorder.py) - capture loop and session orchestration
-- [`src/tracker/storage/local_sqlite.py`](/Users/keenan/Documents/AIPent/src/tracker/storage/local_sqlite.py) - local persistence
-- [`src/tracker/storage/insforge_client.py`](/Users/keenan/Documents/AIPent/src/tracker/storage/insforge_client.py) - InsForge client
-- [`insforge_schema.sql`](/Users/keenan/Documents/AIPent/insforge_schema.sql) - backend schema reference
+- `macos/BuddyBar` - native macOS menubar app
+- `desktop` - Tauri desktop dashboard
+- `src/tracker/cli.py` - CLI entrypoint
+- `src/tracker/recorder.py` - capture loop and workflow generation pipeline
+- `src/tracker/storage/local_sqlite.py` - local persistence
+- `src/tracker/storage/insforge_client.py` - InsForge sync client
+- `insforge_schema.sql` - backend schema reference
 
-## Product Positioning
+## Closing
 
-AIPent is best understood as a workflow capture product for macOS:
-
-- **BuddyBar** makes capture feel lightweight and always available.
-- **The local tracker** turns activity into structured workflow knowledge.
-- **InsForge** becomes the searchable memory layer for approved outputs.
-
-That combination is what makes the project compelling: native capture on the Mac, careful privacy boundaries, and a backend designed for reusable workflow intelligence instead of raw activity dumping.
+**Replace Your Human with AI Skill is not a screen recorder. It is a workflow memory layer for turning human work into reusable AI skills.**
