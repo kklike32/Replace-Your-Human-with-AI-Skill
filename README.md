@@ -2,16 +2,15 @@
 
 **Do the work once. Turn it into a reusable AI Skill.**
 
-*1st Place winner, Agentic Dev Tools Hackathon, San Francisco.*
+A native macOS workflow-capture product that records real desktop work, captures voice context, and turns repetitive tasks into structured, shareable AI skills.
 
-![Hackathon Winner](https://img.shields.io/badge/1st%20Place-Agentic%20Dev%20Tools%20Hackathon-black)
+> Winner of the Agentic Dev Tools Hackathon in San Francisco.
+
 ![Platform](https://img.shields.io/badge/platform-macOS-111827)
 ![Privacy](https://img.shields.io/badge/privacy-local--first-0f766e)
 ![Backend](https://img.shields.io/badge/backend-InsForge-1d4ed8)
 
-Turn any desktop workflow into reusable AI Skill memory.
-
-This repository contains the macOS app, local tracker, and InsForge sync layer.
+This repository contains the native macOS app, local workflow tracker, voice-aware capture pipeline, and InsForge sync layer for turning human workflows into reusable team skills.
 
 ## The Problem
 
@@ -23,18 +22,22 @@ Teams then pay for the same knowledge again through SOP writing, retraining, sha
 
 ## The Product
 
-**Replace Your Human with AI Skill** is a native macOS workflow-capture product that turns real desktop work into reusable AI-ready skills.
+**Replace Your Human with AI Skill** turns real desktop work into reusable AI-ready skills.
 
-It records a workflow locally, summarizes what happened, generates structured steps and pseudocode, scores automation readiness, and prepares a clean handoff record for future agent execution.
+It captures on-screen activity, app context, OCR, mouse and keyboard events, and optional voice narration locally on the Mac. After the session ends, it generates structured workflow steps, pseudocode, automation hints, and a handoff-ready skill that can be reviewed before syncing.
 
-## Why It Wins
+The result is not a screen recording. It is a reusable workflow artifact that a teammate or future AI agent can understand and execute.
+
+## What Makes It Different
 
 - **Native macOS menubar experience.** Fast to launch, easy to keep running.
 - **One-click capture.** Start the workflow and work normally.
+- **Voice-aware capture.** Spoken context can be recorded alongside the workflow.
 - **Local-first privacy.** Sensitive raw activity stays on-device.
 - **Review before sync.** Nothing approved for cloud memory unless the user chooses it.
 - **Structured workflow knowledge.** Output is useful workflow logic, not raw surveillance footage.
 - **InsForge-backed memory.** Approved workflows can be stored, searched, and shared through [InsForge](https://insforge.dev).
+- **Team collaboration layer.** Skills can be shared, accessed, and reused across a team.
 - **Built for agent handoff.** The end state is not a recording. It is a reusable AI Skill.
 
 ## Product Flow
@@ -44,7 +47,7 @@ Human workflow
       ↓
 BuddyBar local capture
       ↓
-Screenshots + OCR + app context + events
+Screenshots + OCR + app context + events + voice
       ↓
 Chunk summaries
       ↓
@@ -70,7 +73,7 @@ InsForge workflow memory
 
 Imagine an operations worker building the same weekly report every Friday.
 
-They open internal dashboards, export data, clean a spreadsheet, cross-check values, and paste results into a final report. Replace Your Human with AI Skill captures the workflow locally, extracts the structure, and outputs a reusable skill with:
+They open internal dashboards, export data, clean a spreadsheet, cross-check values, narrate what they are doing, and paste results into a final report. Replace Your Human with AI Skill captures the workflow locally, extracts the structure, and outputs a reusable skill with:
 
 - workflow steps
 - pseudocode
@@ -84,6 +87,7 @@ That makes the value obvious for SOP generation, onboarding, operations document
 Local only:
 
 - screenshots
+- voice/audio recordings
 - OCR text
 - keyboard and mouse events
 - raw logs
@@ -109,16 +113,24 @@ It is a native macOS menubar app that lets the user:
 - start capture
 - stop and save a session
 - review generated workflow steps
+- capture spoken narration during the workflow
 - sync an approved result to InsForge
 - open local data and exports
 
 The capture engine runs through the local Python tracker underneath, but the user experience is designed around the Mac menu bar.
 
-## InsForge
+## Team Skills Layer
 
 [InsForge](https://insforge.dev) is the backend for approved workflow memory, search, and sharing.
 
-Only reviewed, structured workflow outputs are eligible to sync. That keeps raw desktop activity local while still making high-value workflow knowledge reusable across sessions and teams.
+Approved skills can be synced to the team workspace, where teammates can discover, download, and reuse workflow skills across machines.
+
+That means one person can perform a workflow once, review the generated skill, publish it, and let another teammate run that same skill on their own machine.
+
+- Live app: <https://r34ir5jz.insforge.site/sign-in?redirect=%2F>
+- Frontend/backend code: [replaceyourhuman-back](https://github.com/Alcray/replaceyourhuman-back/tree/main)
+
+Sync remains explicit. Only reviewed, structured workflow outputs are eligible to sync.
 
 ## Quick Start
 
@@ -163,7 +175,7 @@ On first launch, macOS will ask for **Screen Recording** and **Accessibility** p
 
 1. Launch BuddyBar.
 2. Click **Start**.
-3. Perform the workflow normally.
+3. Perform the workflow normally, with optional voice narration.
 4. Click **Stop**.
 5. Review the generated workflow preview.
 
@@ -180,6 +192,8 @@ INSFORGE_CURRENT_USER_ID=
 ```
 
 Then complete a session and use **Sync Preview to InsForge** from BuddyBar.
+
+For team workflows, approved skills can then be accessed through the web app, shared across the team, and reused on another machine.
 
 ## CLI
 
