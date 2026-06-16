@@ -38,7 +38,7 @@ The result is not a screen recording. It is a reusable workflow artifact that a 
 - **Structured workflow knowledge.** Output is useful workflow logic, not raw surveillance footage.
 - **InsForge-backed memory.** Approved workflows can be stored, searched, and shared through [InsForge](https://insforge.dev).
 - **Team collaboration layer.** Skills can be shared, accessed, and reused across a team.
-- **Built for agent handoff.** The end state is not a recording. It is a reusable AI Skill.
+- **Built for agent handoff.** The end state is not a recording. It is a reusable AI Skill you can hand to Codex, Cowork, or Cursor to replay live.
 
 ## Product Flow
 
@@ -55,9 +55,13 @@ Final workflow pseudocode
       ↓
 Review preview
       ↓
-Approved AI Skill
+Approved AI Skill (workflow steps)
       ↓
-InsForge workflow memory
+Upload to Codex / Cowork / Cursor + Computer Use
+      ↓
+Agent recreates the workflow live (open tabs, click, type, navigate)
+      ↓
+InsForge workflow memory (optional team sharing)
 ```
 
 1. Start recording from BuddyBar.
@@ -66,8 +70,68 @@ InsForge workflow memory
 4. The system generates chunks and summaries.
 5. Final pseudocode and workflow steps are produced.
 6. The user reviews the preview.
-7. The approved summary can sync to InsForge.
-8. The workflow becomes a reusable AI Skill.
+7. Export or copy the workflow steps into an AI agent with Computer Use.
+8. The agent recreates the captured actions on a live desktop or browser.
+9. Optionally sync the approved summary to InsForge for team reuse.
+
+## Replay the Workflow with an AI Agent
+
+This is the end state most people care about: **you do the work once, then an AI agent does it again for you.**
+
+After a session finishes, BuddyBar shows a **Generated Steps Preview** — numbered workflow steps distilled from everything that was captured (apps opened, tabs switched, buttons clicked, fields filled, exports run, and anything you narrated out loud). Those steps are the handoff artifact. They are not a video replay; they are instructions an agent can follow.
+
+### What you get
+
+| Output | Where it lives | What it contains |
+|--------|----------------|------------------|
+| **Workflow steps preview** | BuddyBar UI after Stop | Plain-text numbered steps ready to copy |
+| **Session export** | `data/exports/session_<id>_summary.md` | Pseudocode, plain-text steps, automation suggestions |
+| **Computer Use executor skill** | `src/tracker/skills/SKILL.md` | Agent instructions for live desktop/browser control |
+
+The bundled `SKILL.md` tells the agent *how* to execute step-by-step workflows safely (observe screen, click, type, verify each step, pause for approvals). Your captured session provides *what* to do.
+
+### How to recreate the workflow
+
+1. **Capture once** — Start BuddyBar, perform the workflow, Stop, and review the generated steps. Edit anything that looks wrong before handing off.
+2. **Export the steps** (optional but recommended):
+
+   ```bash
+   python -m tracker.cli export --session-id <session_id>
+   ```
+
+   Or copy the preview text directly from BuddyBar.
+
+3. **Open Codex, Cowork, Cursor Agent, or any tool with Computer Use** — the agent needs the ability to observe the screen and perform clicks, typing, and navigation (OpenAI Computer Use, desktop control, browser control, or equivalent).
+4. **Upload or paste both artifacts:**
+   - Your exported workflow steps (`session_<id>_summary.md` or the BuddyBar preview)
+   - The executor skill at `src/tracker/skills/SKILL.md` (or install it as a Cursor Agent Skill)
+5. **Prompt the agent**, for example:
+
+   > Follow the workflow steps in the attached summary. Use Computer Use to recreate each action in order — open the same apps, switch to the right tabs, click the same controls, fill the same fields, and verify each step before moving on.
+
+6. **The agent runs the workflow live** — opening tabs, clicking menus, typing into forms, exporting files, and reporting progress step by step. It adapts if the UI has changed slightly, and pauses before sensitive actions (passwords, payments, MFA).
+
+That is the full loop: **human performs once → system extracts structured steps → AI agent replays on a real machine.**
+
+### Example
+
+You capture a Friday report workflow: open an internal dashboard, export a CSV, clean it in a spreadsheet, cross-check totals, paste into a slide deck.
+
+The generated steps might look like:
+
+```text
+1. Open Chrome and navigate to the ops dashboard.
+2. Export the weekly metrics CSV from the Reports panel.
+3. Open the spreadsheet and remove duplicate rows in column A.
+4. Verify totals in the Summary tab match the dashboard.
+5. Paste the final table into the weekly report slide.
+```
+
+Upload those steps plus `SKILL.md` to Codex or Cowork. The agent opens Chrome, finds the dashboard, clicks Export, switches to the spreadsheet app, and continues through the list — the same actions you tracked, now executed by the agent.
+
+### Team reuse
+
+Sync the approved workflow to InsForge so teammates can download the same steps and run them on their own machine with their own Codex, Cowork, or Cursor session. One person captures; everyone can replay.
 
 ## Demo Use Case
 
@@ -178,6 +242,7 @@ On first launch, macOS will ask for **Screen Recording** and **Accessibility** p
 3. Perform the workflow normally, with optional voice narration.
 4. Click **Stop**.
 5. Review the generated workflow preview.
+6. Export or copy the steps, then upload them to Codex, Cowork, or Cursor with Computer Use to recreate the workflow (see [Replay the Workflow with an AI Agent](#replay-the-workflow-with-an-ai-agent)).
 
 ### InsForge sync flow
 
@@ -235,10 +300,11 @@ python -m tracker.cli sync
 - `desktop` - Tauri desktop dashboard
 - `src/tracker/cli.py` - CLI entrypoint
 - `src/tracker/recorder.py` - capture loop and workflow generation pipeline
+- `src/tracker/skills/SKILL.md` - Computer Use executor skill for agent replay
 - `src/tracker/storage/local_sqlite.py` - local persistence
 - `src/tracker/storage/insforge_client.py` - InsForge sync client
 - `insforge_schema.sql` - backend schema reference
 
 ## Closing
 
-**Replace Your Human with AI Skill is not a screen recorder. It is a workflow memory layer for turning human work into reusable AI skills.**
+**Replace Your Human with AI Skill is not a screen recorder. It is a workflow memory layer for turning human work into reusable AI skills — and replaying them with Codex, Cowork, or any Computer Use agent.**
