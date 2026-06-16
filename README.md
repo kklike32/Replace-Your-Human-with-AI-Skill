@@ -38,7 +38,7 @@ The result is not a screen recording. It is a reusable workflow artifact that a 
 - **Structured workflow knowledge.** Output is useful workflow logic, not raw surveillance footage.
 - **InsForge-backed memory.** Approved workflows can be stored, searched, and shared through [InsForge](https://insforge.dev).
 - **Team collaboration layer.** Skills can be shared, accessed, and reused across a team.
-- **Built for agent handoff.** The end state is not a recording. It is a reusable AI Skill you can hand to Codex, Cowork, or Cursor to replay live.
+- **Built for agent handoff.** The end state is not a recording. It is a reusable AI Skill you can hand to Codex or Claude Cowork to replay live.
 
 ## Product Flow
 
@@ -57,7 +57,7 @@ Review preview
       ↓
 Approved AI Skill (workflow steps)
       ↓
-Upload to Codex / Cowork / Cursor + Computer Use
+Upload to Codex or Claude Cowork + Computer Use
       ↓
 Agent recreates the workflow live (open tabs, click, type, navigate)
       ↓
@@ -70,7 +70,7 @@ InsForge workflow memory (optional team sharing)
 4. The system generates chunks and summaries.
 5. Final pseudocode and workflow steps are produced.
 6. The user reviews the preview.
-7. Export or copy the workflow steps into an AI agent with Computer Use.
+7. Export or copy the workflow steps into Codex or Claude Cowork.
 8. The agent recreates the captured actions on a live desktop or browser.
 9. Optionally sync the approved summary to InsForge for team reuse.
 
@@ -101,10 +101,10 @@ The bundled `SKILL.md` tells the agent *how* to execute step-by-step workflows s
 
    Or copy the preview text directly from BuddyBar.
 
-3. **Open Codex, Cowork, Cursor Agent, or any tool with Computer Use** — the agent needs the ability to observe the screen and perform clicks, typing, and navigation (OpenAI Computer Use, desktop control, browser control, or equivalent).
+3. **Open Codex or Claude Cowork** — both can observe the screen and perform clicks, typing, and navigation to recreate desktop and browser workflows.
 4. **Upload or paste both artifacts:**
    - Your exported workflow steps (`session_<id>_summary.md` or the BuddyBar preview)
-   - The executor skill at `src/tracker/skills/SKILL.md` (or install it as a Cursor Agent Skill)
+   - The executor skill at `src/tracker/skills/SKILL.md`
 5. **Prompt the agent**, for example:
 
    > Follow the workflow steps in the attached summary. Use Computer Use to recreate each action in order — open the same apps, switch to the right tabs, click the same controls, fill the same fields, and verify each step before moving on.
@@ -127,11 +127,11 @@ The generated steps might look like:
 5. Paste the final table into the weekly report slide.
 ```
 
-Upload those steps plus `SKILL.md` to Codex or Cowork. The agent opens Chrome, finds the dashboard, clicks Export, switches to the spreadsheet app, and continues through the list — the same actions you tracked, now executed by the agent.
+Upload those steps plus `SKILL.md` to Codex or Claude Cowork. The agent opens Chrome, finds the dashboard, clicks Export, switches to the spreadsheet app, and continues through the list — the same actions you tracked, now executed by the agent.
 
 ### Team reuse
 
-Sync the approved workflow to InsForge so teammates can download the same steps and run them on their own machine with their own Codex, Cowork, or Cursor session. One person captures; everyone can replay.
+Sync the approved workflow to InsForge so teammates can download the same steps and run them on their own machine with Codex or Claude Cowork. One person captures; everyone can replay.
 
 ## Demo Use Case
 
@@ -242,7 +242,7 @@ On first launch, macOS will ask for **Screen Recording** and **Accessibility** p
 3. Perform the workflow normally, with optional voice narration.
 4. Click **Stop**.
 5. Review the generated workflow preview.
-6. Export or copy the steps, then upload them to Codex, Cowork, or Cursor with Computer Use to recreate the workflow (see [Replay the Workflow with an AI Agent](#replay-the-workflow-with-an-ai-agent)).
+6. Export or copy the steps, then upload them to Codex or Claude Cowork to recreate the workflow (see [Replay the Workflow with an AI Agent](#replay-the-workflow-with-an-ai-agent)).
 
 ### InsForge sync flow
 
@@ -307,4 +307,4 @@ python -m tracker.cli sync
 
 ## Closing
 
-**Replace Your Human with AI Skill is not a screen recorder. It is a workflow memory layer for turning human work into reusable AI skills — and replaying them with Codex, Cowork, or any Computer Use agent.**
+**Replace Your Human with AI Skill is not a screen recorder. It is a workflow memory layer for turning human work into reusable AI skills — and replaying them with Codex or Claude Cowork.**
